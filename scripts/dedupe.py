@@ -24,74 +24,114 @@ ENFOQUE DE LA V2
     "Bielsa" encaja con Marcelo y con Rafael -> no se propone nada.
 
 Uso:
-    python scripts/resolver_entidades2.py --limpiar     (ver ruido)
-    python scripts/resolver_entidades2.py --limpiar --confirmar
-    python scripts/resolver_entidades2.py --proponer
+    python scripts/dedupe.py --clean     (ver ruido)
+    python scripts/dedupe.py --clean --confirm
+    python scripts/dedupe.py --propose
     (editar data/merges.json)
-    python scripts/resolver_entidades2.py --aplicar
+    python scripts/dedupe.py --apply
 """
 
 import argparse
 import json
-import os
 import re
 import sys
-import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
+from clients import connect
 from dotenv import load_dotenv
 from langchain_neo4j import Neo4jGraph
+from names import strip_accents
 
 load_dotenv()
 
-SALIDA = Path(__file__).parent.parent / "data" / "merges.json"
+OUTPUT = Path(__file__).parent.parent / "data" / "merges.json"
 
 # Formas juridicas y abreviaturas que no distinguen un club de otro.
 # OJO con lo que NO esta aqui: 'b' no se quita, porque "Barcelona B" es el
 # filial y es una entidad legitimamente distinta de "Barcelona".
-RUIDO_CLUB = {
-    "a", "c", "f", "d", "r", "s", "u", "ac", "fc", "cf", "cd", "ud", "sc",
-    "sl", "rcd", "afc", "acf", "usc", "football", "club", "calcio",
+CLUB_NOISE = {
+    "a",
+    "c",
+    "f",
+    "d",
+    "r",
+    "s",
+    "u",
+    "ac",
+    "fc",
+    "cf",
+    "cd",
+    "ud",
+    "sc",
+    "sl",
+    "rcd",
+    "afc",
+    "acf",
+    "usc",
+    "football",
+    "club",
+    "calcio",
 }
 
 # Nodos que no son entidades: nombres de tipo, articulos, marcadores de
 # fallo del modelo. Comparado en minusculas y sin acentos.
-BASURA_EXACTA = {
-    "el", "la", "los", "las", "un", "una", "club", "competicion", "entrenador",
-    "entrenadores", "jugador", "jugadores", "seleccion", "liga", "ligas",
-    "copa", "copas", "campeonato", "campeonatos", "titulos", "unknown", "n/a",
-    "na", "none", "null", "actualmente", "se convirtio", "su padre",
-    "temporada", "equipo", "equipos", "partido", "partidos",
+NOISE_EXACT = {
+    "el",
+    "la",
+    "los",
+    "las",
+    "un",
+    "una",
+    "club",
+    "competicion",
+    "entrenador",
+    "entrenadores",
+    "jugador",
+    "jugadores",
+    "seleccion",
+    "liga",
+    "ligas",
+    "copa",
+    "copas",
+    "campeonato",
+    "campeonatos",
+    "titulos",
+    "unknown",
+    "n/a",
+    "na",
+    "none",
+    "null",
+    "actualmente",
+    "se convirtio",
+    "su padre",
+    "temporada",
+    "equipo",
+    "equipos",
+    "partido",
+    "partidos",
 }
 
 
-def sin_acentos(texto: str) -> str:
-    return "".join(
-        c for c in unicodedata.normalize("NFD", texto)
-        if unicodedata.category(c) != "Mn"
-    )
-
-
-def base(texto: str) -> str:
+def normalize_text(texto: str) -> str:
     """Minusculas, sin acentos, sin puntuacion, espacios colapsados."""
-    s = sin_acentos(texto.lower())
+    s = strip_accents(texto.lower())
     s = re.sub(r"[^\w\s]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
 
-def clave(nombre: str, tipo: str) -> str:
+def match_key(nombre: str, tipo: str) -> str:
     """Clave de agrupacion. Para clubes quita ademas la forma juridica:
     'Real Madrid C. F.' y 'Real Madrid' -> 'real madrid'
     'Real Sociedad'                     -> 'real sociedad'  (no colisiona)
     """
-    s = base(nombre)
+    s = normalize_text(nombre)
     if tipo == "Club":
-        s = " ".join(t for t in s.split() if t not in RUIDO_CLUB)
+        s = " ".join(t for t in s.split() if t not in CLUB_NOISE)
     return s.strip()
 
 
-def distancia_edicion(a: str, b: str, tope: int = 2) -> int:
+def edit_distance(a: str, b: str, tope: int = 2) -> int:
     """Levenshtein con corte temprano. Para cazar erratas del modelo:
     'Johann Cruyff' vs 'Johan Cruyff'."""
     if abs(len(a) - len(b)) > tope:
@@ -109,16 +149,7 @@ def distancia_edicion(a: str, b: str, tope: int = 2) -> int:
     return previa[-1]
 
 
-def conectar() -> Neo4jGraph:
-    return Neo4jGraph(
-        url=os.getenv("NEO4J_URI", "bolt://127.0.0.1:7687"),
-        username=os.getenv("NEO4J_USERNAME", "neo4j"),
-        password=os.getenv("NEO4J_PASSWORD", "graphrag2026"),
-        refresh_schema=False,
-    )
-
-
-def leer_entidades(grafo: Neo4jGraph) -> list[dict]:
+def read_entities(grafo: Neo4jGraph) -> list[dict]:
     return grafo.query(
         """
         MATCH (n) WHERE NOT n:Document
@@ -132,12 +163,18 @@ def leer_entidades(grafo: Neo4jGraph) -> list[dict]:
 
 # --- Limpieza -------------------------------------------------------------
 
-def es_basura(nombre: str) -> str | None:
-    """Devuelve el motivo si el nodo es ruido, o None si parece legitimo."""
-    b = base(nombre)
+
+def noise_reason(nombre: str) -> str | None:
+    """Devuelve el motivo si el nodo es ruido, o None si parece legitimo.
+
+    IMPORTANTE: las expresiones regulares se aplican sobre el texto
+    NORMALIZADO (sin acentos). Comparando contra el nombre crudo, "posición"
+    nunca encaja con el patron "posicion" y el nodo se cuela.
+    """
+    b = normalize_text(nombre)
     if not b:
         return "vacio"
-    if b in BASURA_EXACTA:
+    if b in NOISE_EXACT:
         return "termino generico"
     if len(nombre) > 55:
         return "frase, no entidad"
@@ -147,18 +184,37 @@ def es_basura(nombre: str) -> str | None:
     # y es una competicion legitima.
     if len(nombre.split()) > 9:
         return "demasiadas palabras"
-    # Un partido concreto no es una competicion.
-    if re.match(r"(?i)^(partido|partidos|generacion|generación)\b", nombre):
+    if re.match(
+        r"^(partido|partidos|generacion|mejor|mejores"
+        r"|personalidad|campeona)\b",
+        b,
+    ):
         return "evento o descripcion, no entidad"
-    if re.search(r"(?i)\b(subcampeon|puesto|posicion|rendimiento)\b", nombre):
+    # "Equipo de su ciudad..." es una descripcion; "Equipo del Año de la
+    # UEFA" es un premio real. Los distingue el articulo.
+    if re.match(r"^equipos? de (su|mi|la|el|los)\b", b):
+        return "evento o descripcion, no entidad"
+    # \w* al final y no \b: sin eso, "subcampeon" no encaja con
+    # "subcampeonato" ni "subcampeones", y esos nodos se cuelan.
+    if re.search(r"\b(subcampeon\w*|puesto|posicion|rendimiento|clasificad\w*)\b", b):
         return "resultado, no competicion"
+    # Un nombre de competicion no lleva rival ni aclaracion entre parentesis:
+    # "Liga de Campeones contra el Shajtar" es una frase, no una entidad.
+    if "(" in nombre or ")" in nombre:
+        return "lleva aclaracion entre parentesis"
+    if re.search(
+        r"\b(contra|frente|para|desde|hasta|durante|tras|segun|"
+        r"historia|epoca|temporada)\b",
+        b,
+    ):
+        return "frase con preposicion, no entidad"
     return None
 
 
-def limpiar(grafo: Neo4jGraph, confirmar: bool) -> int:
-    entidades = leer_entidades(grafo)
+def clean(grafo: Neo4jGraph, confirmar: bool) -> int:
+    entidades = read_entities(grafo)
     sospechosos = [
-        (e, motivo) for e in entidades if (motivo := es_basura(e["nombre"]))
+        (e, motivo) for e in entidades if (motivo := noise_reason(e["nombre"]))
     ]
 
     if not sospechosos:
@@ -170,8 +226,8 @@ def limpiar(grafo: Neo4jGraph, confirmar: bool) -> int:
         print(f"  [{e['tipo']}] {e['nombre'][:50]:52} ({motivo})")
 
     if not confirmar:
-        print(f"\nEsto es solo una previsualizacion: no se ha borrado nada.")
-        print("Revisa la lista y, si estas de acuerdo, repite con --confirmar")
+        print("\nEsto es solo una previsualizacion: no se ha borrado nada.")
+        print("Revisa la lista y, si estas de acuerdo, repite con --confirm")
         return 0
 
     nombres = [e["nombre"] for e, _ in sospechosos]
@@ -185,18 +241,19 @@ def limpiar(grafo: Neo4jGraph, confirmar: bool) -> int:
 
 # --- Propuesta de fusiones ------------------------------------------------
 
-def proponer(grafo: Neo4jGraph) -> int:
-    entidades = [e for e in leer_entidades(grafo) if e["tipo"]]
+
+def propose(grafo: Neo4jGraph) -> int:
+    entidades = [e for e in read_entities(grafo) if e["tipo"]]
     por_nombre = {e["nombre"]: e for e in entidades}
 
     grupos: list[dict] = []
     ya_agrupado: set[str] = set()
 
-    # Detector 1: clave normalizada identica. Es el unico donde agrupamos
+    # Detector 1: match_key normalizada identica. Es el unico donde agrupamos
     # transitivamente, porque la igualdad si es una relacion de equivalencia.
     por_clave: dict[tuple[str, str], list[str]] = defaultdict(list)
     for e in entidades:
-        por_clave[(e["tipo"], clave(e["nombre"], e["tipo"]))].append(e["nombre"])
+        por_clave[(e["tipo"], match_key(e["nombre"], e["tipo"]))].append(e["nombre"])
 
     for (tipo, _), miembros in por_clave.items():
         if len(miembros) < 2:
@@ -209,14 +266,14 @@ def proponer(grafo: Neo4jGraph) -> int:
                 "canonico": miembros[0],
                 "variantes": miembros,
                 "aprobado": False,
-                "nota": "alta confianza: mismo nombre tras normalizar",
+                "nota": "alta confianza: mismo nombre tras normalize",
             }
         )
         ya_agrupado.update(miembros)
 
     # Detectores debiles: proponen PARES, nunca cadenas, y solo cuando la
     # correspondencia es unica.
-    def emitir_pares(nombre_det: str, pares: list[tuple[str, str]], nota: str):
+    def emit_pairs(nombre_det: str, pares: list[tuple[str, str]], nota: str):
         # Cuenta cuantas veces aparece cada forma corta. Si aparece mas de
         # una vez, es ambigua y se descarta entera.
         conteo: dict[str, int] = defaultdict(int)
@@ -242,9 +299,11 @@ def proponer(grafo: Neo4jGraph) -> int:
 
         descartados = sorted({c for c, n in conteo.items() if n > 1})
         if descartados:
-            print(f"  {nombre_det}: {len(descartados)} descartados por ambiguos "
-                  f"-> {', '.join(descartados[:6])}"
-                  f"{'...' if len(descartados) > 6 else ''}")
+            print(
+                f"  {nombre_det}: {len(descartados)} descartados por ambiguos "
+                f"-> {', '.join(descartados[:6])}"
+                f"{'...' if len(descartados) > 6 else ''}"
+            )
 
     # Detector 2: forma corta que es prefijo exacto de una larga.
     # 'Ajax' dentro de 'Ajax de Amsterdam'. El espacio obliga a frontera de
@@ -254,7 +313,7 @@ def proponer(grafo: Neo4jGraph) -> int:
         for largo in entidades:
             if corto["tipo"] != largo["tipo"] or corto["nombre"] == largo["nombre"]:
                 continue
-            bc, bl = base(corto["nombre"]), base(largo["nombre"])
+            bc, bl = normalize_text(corto["nombre"]), normalize_text(largo["nombre"])
             if bc and len(bc) < len(bl) and bl.startswith(bc + " "):
                 pares_prefijo.append((corto["nombre"], largo["nombre"]))
 
@@ -268,7 +327,9 @@ def proponer(grafo: Neo4jGraph) -> int:
         for largo in entidades:
             if largo["tipo"] != corto["tipo"] or " " not in largo["nombre"]:
                 continue
-            if base(largo["nombre"]).split()[-1] == base(corto["nombre"]):
+            if normalize_text(largo["nombre"]).split()[-1] == normalize_text(
+                corto["nombre"]
+            ):
                 pares_apellido.append((corto["nombre"], largo["nombre"]))
 
     # Detector 4: subconjunto de palabras. Caza el segundo nombre:
@@ -279,11 +340,11 @@ def proponer(grafo: Neo4jGraph) -> int:
     # hermanos ('Marcelo Bielsa' vs 'Rafael Bielsa').
     pares_subconjunto = []
     for corto in entidades:
-        tc = base(corto["nombre"]).split()
+        tc = normalize_text(corto["nombre"]).split()
         if corto["tipo"] not in ("Entrenador", "Jugador") or len(tc) < 2:
             continue
         for largo in entidades:
-            tl = base(largo["nombre"]).split()
+            tl = normalize_text(largo["nombre"]).split()
             if largo["tipo"] != corto["tipo"] or len(tl) <= len(tc):
                 continue
             if tc[0] == tl[0] and tc[-1] == tl[-1] and set(tc) <= set(tl):
@@ -296,26 +357,31 @@ def proponer(grafo: Neo4jGraph) -> int:
         for b in entidades:
             if a["tipo"] != b["tipo"] or a["nombre"] >= b["nombre"]:
                 continue
-            ba, bb = base(a["nombre"]), base(b["nombre"])
+            ba, bb = normalize_text(a["nombre"]), normalize_text(b["nombre"])
             if len(ba) < 6 or abs(len(ba) - len(bb)) > 2:
                 continue
-            if 0 < distancia_edicion(ba, bb) <= 2:
+            if 0 < edit_distance(ba, bb) <= 2:
                 par = (a["nombre"], b["nombre"])
                 if par not in vistos:
                     vistos.add(par)
                     pares_errata.append(par)
 
     print("Detectores debiles:")
-    emitir_pares("prefijo", pares_prefijo, "revisar: forma corta contenida")
-    emitir_pares("apellido", pares_apellido, "revisar: apellido suelto")
-    emitir_pares("subconjunto", pares_subconjunto,
-                 "revisar: mismo nombre y apellido, distinto segundo nombre")
-    emitir_pares("errata", pares_errata, "revisar: difieren en 1-2 letras")
+    emit_pairs("prefijo", pares_prefijo, "revisar: forma corta contenida")
+    emit_pairs("apellido", pares_apellido, "revisar: apellido suelto")
+    emit_pairs(
+        "subconjunto",
+        pares_subconjunto,
+        "revisar: mismo nombre y apellido, distinto segundo nombre",
+    )
+    emit_pairs("errata", pares_errata, "revisar: difieren en 1-2 letras")
 
     grupos.sort(key=lambda g: (g["detector"], g["tipo"], g["canonico"]))
-    SALIDA.write_text(json.dumps(grupos, ensure_ascii=False, indent=2), encoding="utf-8")
+    OUTPUT.write_text(
+        json.dumps(grupos, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
 
-    print(f"\n{len(grupos)} grupos -> {SALIDA}\n")
+    print(f"\n{len(grupos)} grupos -> {OUTPUT}\n")
     det_actual = None
     for g in grupos:
         if g["detector"] != det_actual:
@@ -328,12 +394,12 @@ def proponer(grafo: Neo4jGraph) -> int:
     return 0
 
 
-def aplicar(grafo: Neo4jGraph) -> int:
-    if not SALIDA.exists():
-        print(f"No existe {SALIDA}. Ejecuta primero --proponer.")
+def apply_merges(grafo: Neo4jGraph) -> int:
+    if not OUTPUT.exists():
+        print(f"No existe {OUTPUT}. Ejecuta primero --propose.")
         return 1
 
-    grupos = json.loads(SALIDA.read_text(encoding="utf-8"))
+    grupos = json.loads(OUTPUT.read_text(encoding="utf-8"))
     aprobados = [g for g in grupos if g.get("aprobado")]
     if not aprobados:
         print('Ningun grupo aprobado. Edita el JSON y pon "aprobado": true.')
@@ -367,19 +433,19 @@ def aplicar(grafo: Neo4jGraph) -> int:
 
 def main() -> int:
     p = argparse.ArgumentParser()
-    p.add_argument("--limpiar", action="store_true")
-    p.add_argument("--confirmar", action="store_true", help="con --limpiar, borra")
-    p.add_argument("--proponer", action="store_true")
-    p.add_argument("--aplicar", action="store_true")
+    p.add_argument("--clean", action="store_true")
+    p.add_argument("--confirm", action="store_true", help="con --clean, borra")
+    p.add_argument("--propose", action="store_true")
+    p.add_argument("--apply", action="store_true")
     args = p.parse_args()
 
-    grafo = conectar()
-    if args.limpiar:
-        return limpiar(grafo, args.confirmar)
-    if args.proponer:
-        return proponer(grafo)
-    if args.aplicar:
-        return aplicar(grafo)
+    grafo = connect()
+    if args.clean:
+        return clean(grafo, args.confirm)
+    if args.propose:
+        return propose(grafo)
+    if args.apply:
+        return apply_merges(grafo)
     p.print_help()
     return 1
 

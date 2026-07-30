@@ -11,6 +11,7 @@ AVISO: esto tarda. Un 7B en una 3070 va a ~10-20s por chunk, y salen unos
 corriendo y ve a por un cafe.
 
 Uso:
+    python scripts/ingest.py --download  # baja el corpus de Wikipedia
     python scripts/ingest.py            # ingesta normal (reanuda)
     python scripts/ingest.py --reset    # borra el grafo y empieza limpio
     python scripts/ingest.py --limit 2  # solo 2 articulos, para probar
@@ -18,29 +19,28 @@ Uso:
 
 import argparse
 import json
-import os
+import re
 import sys
 import time
 from pathlib import Path
 
+import wikipediaapi
+from clients import connect, llm
 from dotenv import load_dotenv
 from langchain_core.documents import Document
 from langchain_experimental.graph_transformers import LLMGraphTransformer
-from langchain_neo4j import Neo4jGraph
-from langchain_ollama import ChatOllama
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-
-from esquema import (
-    INSTRUCCIONES_EXTRA,
-    NODOS_PERMITIDOS,
-    RELACIONES_PERMITIDAS,
+from schema import (
+    ALLOWED_NODES,
+    ALLOWED_RELATIONSHIPS,
+    EXTRA_INSTRUCTIONS,
 )
 
 load_dotenv()
 
-BASE = Path(__file__).parent.parent
-CORPUS_DIR = BASE / "data" / "corpus"
-PROGRESO = BASE / "data" / ".progreso.json"
+BASE_DIR = Path(__file__).parent.parent
+CORPUS = BASE_DIR / "data" / "corpus"
+PROGRESS_FILE = BASE_DIR / "data" / ".progreso.json"
 
 # Chunks pequenos a proposito: un 7B pierde precision cuando le das mucho
 # texto de golpe. Con OpenAI podrias irte a 4000 sin problema.
@@ -48,51 +48,106 @@ CHUNK_SIZE = 1500
 CHUNK_OVERLAP = 200
 
 
-def construir_llm() -> ChatOllama:
-    return ChatOllama(
-        model=os.getenv("OLLAMA_LLM_MODEL", "qwen2.5:7b-instruct"),
-        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-        temperature=0,  # extraccion, no creatividad
-        num_ctx=int(os.getenv("OLLAMA_NUM_CTX", "8192")),
+# ======================================================================
+# Descarga del corpus
+# ======================================================================
+
+MAX_CHARS = 8000
+
+# Elegidos porque forman cadenas de influencia reales y cruzadas:
+#   Michels -> Cruyff -> Guardiola -> Arteta
+#   Bielsa -> Pochettino / Simeone
+#   Van Gaal -> Mourinho (fue su asistente en el Barcelona)
+#   Sacchi -> Ancelotti
+ARTICLES = [
+    "Rinus Michels",
+    "Johan Cruyff",
+    "Louis van Gaal",
+    "Arrigo Sacchi",
+    "Marcelo Bielsa",
+    "Pep Guardiola",
+    "José Mourinho",
+    "Carlo Ancelotti",
+    "Mauricio Pochettino",
+    "Diego Simeone",
+    "Mikel Arteta",
+    "Jürgen Klopp",
+    "Xavi Hernández",  # "Xavi" a secas es una pagina de desambiguacion
+    "Roberto De Zerbi",
+]
+
+
+def slugify(titulo: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", titulo.lower()).strip("_")
+
+
+def download() -> int:
+    """Baja los articulos de Wikipedia a data/corpus/.
+
+    Se trunca cada uno a MAX_CHARS: un 7B tarda ~10-20s por chunk y un
+    articulo completo son 40+. Con la parte inicial (biografia, trayectoria)
+    ya estan las relaciones que interesan.
+    """
+    CORPUS.mkdir(parents=True, exist_ok=True)
+    wiki = wikipediaapi.Wikipedia(
+        user_agent="graphrag-futbol/0.1 (https://github.com/DvncanG)",
+        language="es",
     )
+    fallos = []
+    for titulo in ARTICLES:
+        pagina = wiki.page(titulo)
+        if not pagina.exists():
+            print(f"  [FAIL] {titulo} -> no existe en es.wikipedia")
+            fallos.append(titulo)
+            continue
+        texto = pagina.text[:MAX_CHARS]
+        destino = CORPUS / f"{slugify(titulo)}.txt"
+        destino.write_text(texto, encoding="utf-8")
+        print(f"  [OK]   {titulo:25} {len(texto):>6} chars -> {destino.name}")
+    print(f"\n{len(ARTICLES) - len(fallos)}/{len(ARTICLES)} articulos en {CORPUS}")
+    return 1 if fallos else 0
 
 
-def construir_grafo() -> Neo4jGraph:
-    return Neo4jGraph(
-        url=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
-        username=os.getenv("NEO4J_USERNAME", "neo4j"),
-        password=os.getenv("NEO4J_PASSWORD", "graphrag2026"),
-        refresh_schema=False,  # el grafo esta vacio al principio
-    )
+# ======================================================================
+# Ingesta
+# ======================================================================
 
 
-def cargar_progreso() -> set[str]:
-    if PROGRESO.exists():
-        return set(json.loads(PROGRESO.read_text()))
+def load_progress() -> set[str]:
+    if PROGRESS_FILE.exists():
+        return set(json.loads(PROGRESS_FILE.read_text()))
     return set()
 
 
-def guardar_progreso(hechos: set[str]) -> None:
-    PROGRESO.write_text(json.dumps(sorted(hechos), ensure_ascii=False, indent=2))
+def save_progress(hechos: set[str]) -> None:
+    PROGRESS_FILE.write_text(json.dumps(sorted(hechos), ensure_ascii=False, indent=2))
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--download", action="store_true", help="bajar el corpus de Wikipedia y salir"
+    )
     parser.add_argument("--reset", action="store_true", help="borrar grafo y progreso")
     parser.add_argument("--limit", type=int, default=None, help="limitar articulos")
     args = parser.parse_args()
 
-    ficheros = sorted(CORPUS_DIR.glob("*.txt"))
+    if args.download:
+        return download()
+
+    ficheros = sorted(CORPUS.glob("*.txt"))
     if not ficheros:
-        print(f"No hay corpus en {CORPUS_DIR}. Ejecuta download_corpus.py primero.")
+        print(
+            f"No hay corpus en {CORPUS}. Ejecuta: python scripts/ingest.py --download"
+        )
         return 1
 
-    grafo = construir_grafo()
+    grafo = connect()
 
     if args.reset:
         print("Borrando grafo existente...")
         grafo.query("MATCH (n) DETACH DELETE n")
-        PROGRESO.unlink(missing_ok=True)
+        PROGRESS_FILE.unlink(missing_ok=True)
 
     # Evita nodos duplicados con el mismo id cuando reejecutas
     grafo.query(
@@ -101,13 +156,13 @@ def main() -> int:
     )
 
     transformador = LLMGraphTransformer(
-        llm=construir_llm(),
-        allowed_nodes=NODOS_PERMITIDOS,
-        allowed_relationships=RELACIONES_PERMITIDAS,
+        llm=llm(),
+        allowed_nodes=ALLOWED_NODES,
+        allowed_relationships=ALLOWED_RELATIONSHIPS,
         # node_properties NO se puede usar con ignore_tool_usage=True: exige
         # function calling nativo. Renunciamos a las propiedades para poder
         # tener un esquema que el modelo respete. Las relaciones importan mas.
-        additional_instructions=INSTRUCCIONES_EXTRA,
+        additional_instructions=EXTRA_INSTRUCTIONS,
         strict_mode=True,  # descarta lo que no encaje en el esquema
         # CLAVE: por la via del tool calling, Ollama no traslada el esquema al
         # modelo y este extrae con tipos genericos en ingles (Person, Team...),
@@ -123,7 +178,7 @@ def main() -> int:
         separators=["\n\n", "\n", ". ", " "],
     )
 
-    hechos = cargar_progreso()
+    hechos = load_progress()
     if args.limit:
         ficheros = ficheros[: args.limit]
 
@@ -140,7 +195,9 @@ def main() -> int:
             for n, c in enumerate(chunks)
         ]
 
-        print(f"[{i}/{len(ficheros)}] {fichero.stem} -- {len(chunks)} chunks", flush=True)
+        print(
+            f"[{i}/{len(ficheros)}] {fichero.stem} -- {len(chunks)} chunks", flush=True
+        )
         inicio = time.time()
 
         try:
@@ -155,12 +212,12 @@ def main() -> int:
 
         grafo.add_graph_documents(
             grafo_docs,
-            baseEntityLabel=True,  # anade :__Entity__ a todo, util para indexar
-            include_source=True,   # crea nodos Document -> necesario en el paso 3
+            baseEntityLabel=True,  # anade :__Entity__ a todo, util para build_index
+            include_source=True,  # crea nodos Document -> necesario en el paso 3
         )
 
         hechos.add(fichero.name)
-        guardar_progreso(hechos)
+        save_progress(hechos)
         print(f"    {nodos} nodos, {rels} relaciones en {time.time() - inicio:.0f}s")
 
     print(f"\nTotal: {(time.time() - inicio_total) / 60:.1f} min")

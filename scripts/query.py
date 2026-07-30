@@ -1,5 +1,5 @@
 """
-Paso 3b: consultar. RAG plano vs GraphRAG.
+Paso 3b: answer. RAG plano vs GraphRAG.
 
 MODOS DE RECUPERACION
 
@@ -10,7 +10,7 @@ MODOS DE RECUPERACION
             a) por cada chunk, salta a las entidades que menciona y recoge
                sus relaciones del grafo
             b) detecta las entidades nombradas en la propia pregunta y
-               anade su vecindario, aunque ningun chunk las mencione
+               anade su neighbourhood, aunque ningun chunk las mencione
 
 SOBRE NORMALIZAR LA PREGUNTA
 La busqueda vectorial NO necesita que el usuario escriba bien: "pep
@@ -23,33 +23,36 @@ eso normalizamos ambos lados (minusculas, sin acentos, sin puntuacion) antes
 de comparar.
 
 Uso:
-    python scripts/consultar.py                  # modo interactivo
-    python scripts/consultar.py "tu pregunta"    # una sola consulta
+    python scripts/answer.py --index        # crear el indice (una vez)
+    python scripts/answer.py                  # modo repl
+    python scripts/answer.py "tu pregunta"    # una sola consulta
 """
 
 import argparse
-import os
 import re
 import sys
 import textwrap
-import unicodedata
+import time
 
+from clients import embeddings, llm, neo4j_config
 from dotenv import load_dotenv
 from langchain_neo4j import Neo4jGraph, Neo4jVector
-from langchain_ollama import ChatOllama, OllamaEmbeddings
+from names import strip_accents
 
 load_dotenv()
 
-INDICE = "chunks_vector"
-K = 4                    # chunks a recuperar
-MIN_ENTIDAD = 4          # long. minima para buscar una entidad en la pregunta
-DOMINIO = ("ENTRENO_A|JUGO_EN|ENTRENADO_POR|INFLUYO_EN|FUE_ASISTENTE_DE"
-           "|GANO|GANO_COMO_ENTRENADOR|GANO_COMO_JUGADOR|PRACTICA")
-# Solo relaciones de carrera: para caminos entre personas, compartir un
+INDEX_NAME = "chunks_vector"
+K = 4  # chunks a recuperar
+MIN_ENTITY_LEN = 4  # long. minima para buscar una entidad en la pregunta
+DOMAIN_RELS = (
+    "ENTRENO_A|JUGO_EN|ENTRENADO_POR|INFLUYO_EN|FUE_ASISTENTE_DE"
+    "|GANO|GANO_COMO_ENTRENADOR|GANO_COMO_JUGADOR|PRACTICA"
+)
+# Solo relaciones de fetch_career: para shortest_paths entre personas, compartir un
 # titulo no es un vinculo significativo.
-CARRERA = "ENTRENO_A|JUGO_EN|ENTRENADO_POR|INFLUYO_EN|FUE_ASISTENTE_DE"
+CAREER = "ENTRENO_A|JUGO_EN|ENTRENADO_POR|INFLUYO_EN|FUE_ASISTENTE_DE"
 
-EXPANSION = """
+GRAPH_EXPANSION = """
 WITH node, score
 
 OPTIONAL MATCH (node)-[:MENTIONS]->(e)-[r]->(destino)
@@ -72,7 +75,7 @@ RETURN
   {fuente: node.fuente, hechos: size(hechos)} AS metadata
 """
 
-PLANTILLA = """Responde la pregunta usando SOLO el contexto proporcionado.
+PROMPT = """Responde la pregunta usando SOLO el contexto proporcionado.
 
 El contexto incluye hechos en formato  entidad -RELACION-> entidad
 Traduce cada relacion LITERALMENTE segun este glosario:
@@ -102,7 +105,7 @@ SOLO las lineas del contexto que lo respalden. Si el contexto registra el
 hecho pero no permite contarlo con exactitud, dilo asi en vez de dar un
 numero.
 
-Si aparece un bloque "[Camino mas corto entre las entidades de la
+Si aparece un render_block "[Camino mas corto entre las entidades de la
 pregunta]", contiene la cadena que las une paso a paso. Explicala respetando
 el rol exacto de cada paso.
 
@@ -116,95 +119,118 @@ PREGUNTA: {pregunta}
 RESPUESTA:"""
 
 
-def sin_acentos(t: str) -> str:
-    return "".join(
-        c for c in unicodedata.normalize("NFD", t)
-        if unicodedata.category(c) != "Mn"
-    )
-
-
-def normalizar(t: str) -> str:
+def normalize(t: str) -> str:
     """minusculas, sin acentos, sin puntuacion, espacios colapsados."""
-    s = sin_acentos(t.lower())
+    s = strip_accents(t.lower())
     s = re.sub(r"[^\w\s]", " ", s)
     return re.sub(r"\s+", " ", s).strip()
 
 
-def conf() -> dict:
-    return {
-        "url": os.getenv("NEO4J_URI", "bolt://127.0.0.1:7687"),
-        "username": os.getenv("NEO4J_USERNAME", "neo4j"),
-        "password": os.getenv("NEO4J_PASSWORD", "graphrag2026"),
-    }
+def build_index(recrear: bool = False) -> int:
+    """Calcula los embeddings de cada chunk y crea el indice vectorial.
 
+    El vector se guarda como propiedad del propio nodo :Document, que ya
+    tiene sus relaciones MENTIONS hacia las entidades. Por eso no hace falta
+    un almacen vectorial aparte: una sola consulta Cypher puede buscar por
+    similitud y saltar despues a las entidades relacionadas.
+    """
+    grafo = Neo4jGraph(**neo4j_config(), refresh_schema=False)
+    n = grafo.query("MATCH (d:Document) RETURN count(d) AS n")[0]["n"]
+    if n == 0:
+        print("No hay nodos :Document. Ejecuta ingest.py primero.")
+        return 1
+    print(f"{n} chunks en el grafo")
 
-def embeddings() -> OllamaEmbeddings:
-    return OllamaEmbeddings(
-        model=os.getenv("OLLAMA_EMBED_MODEL", "bge-m3"),
-        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+    if recrear:
+        print(f"Borrando indice '{INDEX_NAME}' y embeddings previos...")
+        grafo.query(f"DROP INDEX {INDEX_NAME} IF EXISTS")
+        grafo.query("MATCH (d:Document) REMOVE d.embedding")
+
+    print("Calculando embeddings...")
+    inicio = time.time()
+    # Recorre los nodos sin embedding, lo calcula y crea el indice.
+    # Es reanudable: si se corta a mitad, al relanzarlo sigue por donde iba.
+    Neo4jVector.from_existing_graph(
+        embedding=embeddings(),
+        **neo4j_config(),
+        index_name=INDEX_NAME,
+        node_label="Document",
+        text_node_properties=["text"],
+        embedding_node_property="embedding",
     )
+    print(f"Hecho en {time.time() - inicio:.0f}s")
 
-
-def llm() -> ChatOllama:
-    return ChatOllama(
-        model=os.getenv("OLLAMA_LLM_MODEL", "qwen2.5:7b-instruct"),
-        base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
-        temperature=0,
-        num_ctx=int(os.getenv("OLLAMA_NUM_CTX", "8192")),
+    c = grafo.query(
+        """
+        MATCH (d:Document)
+        RETURN count(d) AS total, count(d.embedding) AS con_vector,
+               size(head(collect(d.embedding))) AS dimension
+        """
+    )[0]
+    print(
+        f"{c['con_vector']}/{c['total']} chunks con vector de "
+        f"{c['dimension']} dimensiones"
     )
+    if c["con_vector"] < c["total"]:
+        print("AVISO: hay chunks sin embedding. Relanza el script.")
+        return 1
+    return 0
 
 
-class Buscador:
+class Retriever:
     """Se construye una vez y se reutiliza en todas las preguntas.
 
     Crear el objeto Neo4jVector abre conexion y valida el indice; hacerlo en
-    cada pregunta anadiria latencia inutil al modo interactivo.
+    cada pregunta anadiria latencia inutil al modo repl.
     """
 
     def __init__(self) -> None:
         emb = embeddings()
-        self.grafo = Neo4jGraph(**conf(), refresh_schema=False)
+        self.grafo = Neo4jGraph(**neo4j_config(), refresh_schema=False)
         self.modelo = llm()
         self.plano = Neo4jVector.from_existing_index(
-            embedding=emb, **conf(), index_name=INDICE
+            embedding=emb, **neo4j_config(), index_name=INDEX_NAME
         )
         self.expandido = Neo4jVector.from_existing_index(
-            embedding=emb, **conf(), index_name=INDICE,
-            retrieval_query=EXPANSION,
+            embedding=emb,
+            **neo4j_config(),
+            index_name=INDEX_NAME,
+            retrieval_query=GRAPH_EXPANSION,
         )
         # Diccionario normalizado -> id real. Se carga una sola vez.
         filas = self.grafo.query(
             "MATCH (n) WHERE NOT n:Document AND n.id IS NOT NULL RETURN n.id AS id"
         )
-        self.entidades = {normalizar(f["id"]): f["id"] for f in filas}
+        self.entidades = {normalize(f["id"]): f["id"] for f in filas}
         print(f"  {len(self.entidades)} entidades cargadas para deteccion\n")
 
-    def detectar(self, pregunta: str) -> list[str]:
+    def detect_entities(self, pregunta: str) -> list[str]:
         """Entidades del grafo nombradas en la pregunta.
 
         Comparamos ambos lados normalizados, asi que da igual que el usuario
         escriba 'pep guardiola' o 'PEP GUARDIOLA'. El minimo de longitud
         evita que entidades de nombre corto salten con cualquier palabra.
         """
-        p = f" {normalizar(pregunta)} "
+        p = f" {normalize(pregunta)} "
         halladas = [
             real
             for norm, real in self.entidades.items()
-            if len(norm) >= MIN_ENTIDAD and f" {norm} " in p
+            if len(norm) >= MIN_ENTITY_LEN and f" {norm} " in p
         ]
         # Si encajan 'Guardiola' y 'Pep Guardiola', nos quedamos con el largo
         return [
-            a for a in halladas
-            if not any(a != b and normalizar(a) in normalizar(b) for b in halladas)
+            a
+            for a in halladas
+            if not any(a != b and normalize(a) in normalize(b) for b in halladas)
         ]
 
-    def vecindario(self, entidades: list[str]) -> str:
+    def neighbourhood(self, entidades: list[str]) -> str:
         """Relaciones a un salto de las entidades detectadas."""
         if not entidades:
             return ""
         filas = self.grafo.query(
             f"""
-            MATCH (n)-[r:{DOMINIO}]-(v)
+            MATCH (n)-[r:{DOMAIN_RELS}]-(v)
             WHERE n.id IN $ids
             RETURN DISTINCT
               CASE WHEN startNode(r) = n
@@ -219,11 +245,11 @@ class Buscador:
         hechos = "\n".join(f["hecho"] for f in filas)
         return f"[Relaciones de las entidades de la pregunta]\n{hechos}"
 
-    def caminos(self, entidades: list[str]) -> str:
+    def shortest_paths(self, entidades: list[str]) -> str:
         """Camino mas corto entre cada par de entidades detectadas.
 
         POR QUE HACE FALTA
-        vecindario() solo trae relaciones donde una de las entidades es
+        neighbourhood() solo trae relaciones donde una de las entidades es
         extremo. Para "que conecta a Bielsa con Arteta", el eslabon es
         Pochettino, y sus relaciones no aparecen porque ni Bielsa ni Arteta
         son extremo de ellas. El LLM no puede encadenar hechos que no ve.
@@ -237,11 +263,11 @@ class Buscador:
 
         lineas = []
         for i, a in enumerate(entidades):
-            for b in entidades[i + 1:]:
+            for b in entidades[i + 1 :]:
                 filas = self.grafo.query(
                     f"""
                     MATCH (x {{id: $a}}), (y {{id: $b}})
-                    MATCH camino = shortestPath((x)-[:{CARRERA}*..6]-(y))
+                    MATCH camino = shortestPath((x)-[:{CAREER}*..6]-(y))
                     RETURN [rel IN relationships(camino) |
                             startNode(rel).id + ' -' + type(rel) + '-> '
                             + endNode(rel).id] AS pasos
@@ -254,10 +280,11 @@ class Buscador:
 
         if not lineas:
             return ""
-        return "[Camino mas corto entre las entidades de la pregunta]\n" + \
-               "\n".join(lineas)
+        return "[Camino mas corto entre las entidades de la pregunta]\n" + "\n".join(
+            lineas
+        )
 
-    def consultar(self, pregunta: str, con_grafo: bool) -> dict:
+    def answer(self, pregunta: str, con_grafo: bool) -> dict:
         almacen = self.expandido if con_grafo else self.plano
         docs = almacen.similarity_search(pregunta, k=K)
         partes = [d.page_content for d in docs]
@@ -276,7 +303,7 @@ class Buscador:
 
         contexto = "\n\n---\n\n".join(partes)
         respuesta = self.modelo.invoke(
-            PLANTILLA.format(contexto=contexto, pregunta=pregunta)
+            PROMPT.format(contexto=contexto, pregunta=pregunta)
         )
         return {
             "respuesta": respuesta.content.strip(),
@@ -288,7 +315,7 @@ class Buscador:
         }
 
 
-def mostrar(buscador: Buscador, pregunta: str, con_grafo: bool, titulo: str) -> None:
+def render(buscador: Retriever, pregunta: str, con_grafo: bool, titulo: str) -> None:
     print(f"\n{'=' * 70}\n{titulo}\n{'=' * 70}")
     r = buscador.consultar(pregunta, con_grafo)
     print(f"Chunks: {', '.join(str(f) for f in r['fuentes'])}")
@@ -301,7 +328,7 @@ def mostrar(buscador: Buscador, pregunta: str, con_grafo: bool, titulo: str) -> 
     print(textwrap.fill(r["respuesta"], width=70))
 
 
-def interactivo(buscador: Buscador) -> int:
+def repl(buscador: Retriever) -> int:
     modo = "comparar"
     print("Escribe tu pregunta y pulsa Enter.")
     print("Comandos:  /plano   /grafo   /comparar   /salir\n")
@@ -327,37 +354,48 @@ def interactivo(buscador: Buscador) -> int:
             continue
 
         if modo in ("plano", "comparar"):
-            mostrar(buscador, entrada, False, "RAG PLANO (solo vectorial)")
+            render(buscador, entrada, False, "RAG PLANO (solo vectorial)")
         if modo in ("grafo", "comparar"):
-            mostrar(buscador, entrada, True, "GRAPHRAG (vectorial + grafo)")
+            render(buscador, entrada, True, "GRAPHRAG (vectorial + grafo)")
         print()
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("pregunta", nargs="?", help="si se omite, modo interactivo")
+    parser.add_argument("question", nargs="?", help="si se omite, modo repl")
     parser.add_argument(
-        "--modo", choices=["plano", "grafo", "comparar"], default="comparar"
+        "--mode", choices=["plano", "grafo", "comparar"], default="comparar"
+    )
+    parser.add_argument(
+        "--index", action="store_true", help="crear el indice vectorial y salir"
+    )
+    parser.add_argument(
+        "--rebuild",
+        action="store_true",
+        help="con --index, borra el indice y lo rehace",
     )
     args = parser.parse_args()
 
+    if args.index:
+        return build_index(args.rebuild)
+
     print("\nConectando...")
     try:
-        buscador = Buscador()
+        buscador = Retriever()
     except Exception as exc:
         print(f"Error: {str(exc)[:200]}")
-        print("Comprueba que Neo4j esta arriba y que ejecutaste indexar.py")
+        print("Comprueba que Neo4j esta arriba y que ejecutaste build_index.py")
         return 1
 
-    if args.pregunta:
-        if args.modo in ("plano", "comparar"):
-            mostrar(buscador, args.pregunta, False, "RAG PLANO (solo vectorial)")
-        if args.modo in ("grafo", "comparar"):
-            mostrar(buscador, args.pregunta, True, "GRAPHRAG (vectorial + grafo)")
+    if args.question:
+        if args.mode in ("plano", "comparar"):
+            render(buscador, args.question, False, "RAG PLANO (solo vectorial)")
+        if args.mode in ("grafo", "comparar"):
+            render(buscador, args.question, True, "GRAPHRAG (vectorial + grafo)")
         print()
         return 0
 
-    return interactivo(buscador)
+    return repl(buscador)
 
 
 if __name__ == "__main__":

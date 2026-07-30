@@ -12,37 +12,41 @@ Que incluye:
   - filtros por tipo de relacion
 
 Uso:
-    python scripts/exportar_web.py
+    python scripts/build_site.py
 """
 
 import json
-import os
 import sys
 from pathlib import Path
 
+from clients import neo4j_config
 from dotenv import load_dotenv
 from langchain_neo4j import Neo4jGraph
 
 load_dotenv()
 
-SALIDA = Path(__file__).parent.parent / "docs" / "index.html"
+OUTPUT = Path(__file__).parent.parent / "docs" / "index.html"
 
-# Solo relaciones de carrera e influencia. Las competiciones se dejan fuera
+# Solo relaciones de fetch_career e influencia. Las competiciones se dejan fuera
 # a proposito: son cientos de nodos de grado 1 que convierten el grafo en
 # una maranya ilegible sin aportar nada a la historia de los linajes.
-RELACIONES = [
-    "ENTRENO_A", "JUGO_EN", "ENTRENADO_POR", "INFLUYO_EN", "FUE_ASISTENTE_DE",
+EXPORTED_RELS = [
+    "ENTRENO_A",
+    "JUGO_EN",
+    "ENTRENADO_POR",
+    "INFLUYO_EN",
+    "FUE_ASISTENTE_DE",
 ]
 
-CONSULTA = f"""
-MATCH (a)-[r:{'|'.join(RELACIONES)}]->(b)
+SPARQL_QUERY = f"""
+MATCH (a)-[r:{"|".join(EXPORTED_RELS)}]->(b)
 WHERE NOT a:Document AND NOT b:Document
 RETURN a.id AS origen,  [l IN labels(a) WHERE l <> '__Entity__'][0] AS tipo_origen,
        b.id AS destino, [l IN labels(b) WHERE l <> '__Entity__'][0] AS tipo_destino,
        type(r) AS relacion
 """
 
-PLANTILLA = r"""<!DOCTYPE html>
+PROMPT = r"""<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
@@ -146,14 +150,14 @@ button.fantasma{background:transparent; color:var(--tiza-3);
   <input id="desde" list="entidades" placeholder="Desde: Marcelo Bielsa" autocomplete="off">
   <input id="hasta" list="entidades" placeholder="Hasta: Mikel Arteta" autocomplete="off">
   <button id="trazar">Trazar</button>
-  <button id="limpiar" class="fantasma">Ver todo</button>
+  <button id="clean" class="fantasma">Ver todo</button>
   <div id="ruta"></div>
 
   <h2>Relaciones</h2>
   <div id="filtros"></div>
 
   <h2>Tipos</h2>
-  <div id="clave"></div>
+  <div id="match_key"></div>
 </aside>
 
 <div id="lienzo">
@@ -211,8 +215,8 @@ const lista = document.getElementById('entidades');
 DATOS.nodos.map(n=>n.id).sort().forEach(id => {
   const o = document.createElement('option'); o.value = id; lista.appendChild(o);
 });
-document.getElementById('clave').innerHTML = Object.entries(COLOR)
-  .map(([t,c]) => `<div class="clave"><span class="punto" style="background:${c}"></span>${t}</div>`)
+document.getElementById('match_key').innerHTML = Object.entries(COLOR)
+  .map(([t,c]) => `<div class="match_key"><span class="punto" style="background:${c}"></span>${t}</div>`)
   .join('');
 document.getElementById('filtros').innerHTML = Object.entries(ETIQUETA)
   .map(([t,e]) => `<label class="filtro"><input type="checkbox" data-tipo="${t}" checked>${e}</label>`)
@@ -324,7 +328,7 @@ document.getElementById('trazar').addEventListener('click', () => {
   resaltar(pasos);
 });
 
-document.getElementById('limpiar').addEventListener('click', verTodo);
+document.getElementById('clean').addEventListener('click', verTodo);
 
 red.on('click', p => {
   if (!p.nodes.length) return;
@@ -337,16 +341,11 @@ red.on('click', p => {
 
 
 def main() -> int:
-    grafo = Neo4jGraph(
-        url=os.getenv("NEO4J_URI", "bolt://127.0.0.1:7687"),
-        username=os.getenv("NEO4J_USERNAME", "neo4j"),
-        password=os.getenv("NEO4J_PASSWORD", "graphrag2026"),
-        refresh_schema=False,
-    )
+    grafo = Neo4jGraph(**neo4j_config(), refresh_schema=False)
 
-    filas = grafo.query(CONSULTA)
+    filas = grafo.query(SPARQL_QUERY)
     if not filas:
-        print("El grafo no tiene relaciones de carrera. Ejecuta ingest.py.")
+        print("El grafo no tiene relaciones de fetch_career. Ejecuta ingest.py.")
         return 1
 
     tipos: dict[str, str] = {}
@@ -363,15 +362,15 @@ def main() -> int:
         "aristas": aristas,
     }
 
-    SALIDA.parent.mkdir(parents=True, exist_ok=True)
-    SALIDA.write_text(
-        PLANTILLA.replace("__DATOS__", json.dumps(datos, ensure_ascii=False)),
+    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+    OUTPUT.write_text(
+        PROMPT.replace("__DATOS__", json.dumps(datos, ensure_ascii=False)),
         encoding="utf-8",
     )
 
-    kb = SALIDA.stat().st_size / 1024
+    kb = OUTPUT.stat().st_size / 1024
     print(f"{len(datos['nodos'])} entidades, {len(aristas)} relaciones")
-    print(f"-> {SALIDA}  ({kb:.0f} KB)")
+    print(f"-> {OUTPUT}  ({kb:.0f} KB)")
     print("\nAbrelo con doble click.")
     print("Para publicarlo: Settings -> Pages -> Deploy from branch -> main /docs")
     return 0

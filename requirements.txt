@@ -13,3 +13,6 @@ httpx
 wikipedia-api            # para descargar el corpus del paso 2
 fastapi
 uvicorn[standard]
+
+# Desarrollo
+ruff                     # linter y formateador

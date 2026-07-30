@@ -10,43 +10,161 @@ Aqui queda en codigo. Eso convierte el pipeline en reproducible: se puede
 reingestar cuantas veces haga falta y recuperar el mismo grafo depurado
 ejecutando una secuencia de scripts.
 
+Tambien aplica las decisiones de revision sobre data/merges.json (--approve),
+porque son lo mismo: conocimiento humano que el pipeline no puede deducir.
+
 Es idempotente: si un nodo ya no existe o ya esta fusionado, lo salta sin
 error. Se puede ejecutar las veces que se quiera.
 
 Uso:
-    python scripts/correcciones.py            # previsualiza
-    python scripts/correcciones.py --aplicar
+    python scripts/curate.py --approve  # marca merges.json revisado
+    python scripts/curate.py            # previsualiza correcciones
+    python scripts/curate.py --apply
 """
 
 import argparse
-import os
+import json
 import re
 import sys
+from pathlib import Path
 
+from clients import connect
 from dotenv import load_dotenv
 from langchain_neo4j import Neo4jGraph
 
 load_dotenv()
 
+MERGES_FILE = Path(__file__).parent.parent / "data" / "merges.json"
+
+
+APPROVE = {
+    "Johan Cruyff",  # apellido: Cruyff -> Johan Cruyff
+    "Ajax de Ámsterdam",  # prefijo:  Ajax
+    "Atlético de Madrid",  # prefijo:  Atlético
+    "Liga española de fútbol",  # prefijo:  Liga española
+}
+
+# Casos que ningun detector de cadenas puede encontrar, porque el parecido
+# no esta en las letras sino en el conocimiento del dominio.
+MANUAL_GROUPS = [
+    {
+        "detector": "manual",
+        "tipo": "Entrenador",
+        "canonico": "Marcelo Bielsa",
+        "variantes": ["Marcelo Bielsa", "Marcelo Alberto Bielsa Caldera"],
+        "aprobado": True,
+        "nota": "nombre completo con segundo apellido",
+    },
+    {
+        "detector": "manual",
+        "tipo": "Entrenador",
+        "canonico": "José Mourinho",
+        "variantes": [
+            "José Mourinho",
+            "José Mário dos Santos Mourinho Félix",
+            "Mourinho",
+        ],
+        "aprobado": True,
+        "nota": "nombre portugues completo: acaba en Felix, no en Mourinho",
+    },
+    {
+        "detector": "manual",
+        "tipo": "Entrenador",
+        "canonico": "Pep Guardiola",
+        "variantes": ["Pep Guardiola", "Josep Guardiola", "Guardiola"],
+        "aprobado": True,
+        "nota": "Pep es hipocoristico de Josep: cero parecido de cadena",
+    },
+]
+
+# Grupos que los detectores proponen pero que NO deben fusionarse.
+# Se listan para dejar constancia de la decision, no solo del olvido.
+REJECTED = {
+    "Eintracht Fráncfort II": "el II es el filial, otro equipo",
+    "Recopa de Europa": "distinta de la Copa de Europa",
+    "Ronaldo": "Rivaldo es otro jugador",
+    "Copa Intercontinental de la FIFA 2024": "distinta de la historica",
+    "Liga Europa Conferencia": "distinta de la Liga Europa",
+    "Campeonato Europeo de Fútbol (UEFA Euro) 2012": "ediciones distintas",
+    "Copa América 1993": "ediciones distintas",
+    "Copa Confederaciones 2013": "ediciones distintas",
+    "Liga de las temporadas 1998-1999": "temporadas distintas",
+    "UEFA Champions League 2019": "ediciones distintas",
+    "Copa de Francia 2021": "edicion concreta, no el torneo",
+    "Copa de la UEFA 2005-06": "edicion concreta, no el torneo",
+    "Premier League 2019-20": "edicion concreta, no el torneo",
+    "Supercopa de Europa 2019-20": "edicion concreta, no el torneo",
+    "Supercopa de Francia 2021": "edicion concreta, no el torneo",
+}
+
+
+def approve() -> int:
+    """Marca en merges.json los grupos revisados como correctos."""
+    if not MERGES_FILE.exists():
+        print(f"No existe {MERGES_FILE}. Ejecuta antes dedupe.py --propose")
+        return 1
+    grupos = json.loads(MERGES_FILE.read_text(encoding="utf-8"))
+
+    n = 0
+    for gr in grupos:
+        # Los de 'normalizacion' se aprueban en render_block: la match_key normalizada
+        # es igualdad exacta, no parecido, y en la revision manual no dio ni
+        # un falso positivo. Identificarlos por 'canonico' era fragil, porque
+        # ese nombre lo elige el propio script y cambia entre ingestas.
+        ok = gr["detector"] == "normalizacion" or gr["canonico"] in APPROVE
+        gr["aprobado"] = ok
+        n += ok
+
+    existentes = {gr["canonico"] for gr in grupos if gr["detector"] == "manual"}
+    nuevos = [m for m in MANUAL_GROUPS if m["canonico"] not in existentes]
+    grupos.extend(nuevos)
+
+    MERGES_FILE.write_text(
+        json.dumps(grupos, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    print(
+        f"{n} grupos aprobados, {len(nuevos)} manuales anadidos, {len(grupos)} en total"
+    )
+    print("Siguiente: python scripts/dedupe.py --apply")
+    return 0
+
+
 # Alias que ninguna metrica de cadenas puede relacionar: siglas, traducciones
 # entre idiomas, hipocoristicos. Formato: canonico -> variantes a absorber.
-ALIAS = {
+ALIASES = {
     "FC Barcelona": ["Fútbol Club Barcelona", "F. C. Barcelona", "Barcelona"],
     "Paris Saint-Germain": ["PSG"],
+    "Frank Rijkaard": ["Rijkaard"],
+    # Duplicados destapados al comparar el grafo contra Wikidata.
+    "Selección de Uruguay": ["Uruguay"],
+    "Reggiana": ["A. C. Reggiana 1919"],
+    # El modelo pega gentilicios al nombre del club: "AZ Alkmaar neerlandés",
+    # "Antiguoko donostiarra". El detector de prefijo los propone, pero elige
+    # como canonico el nombre LARGO, que es justo el incorrecto. Por eso van
+    # aqui: el alias fija ademas cual es el nombre bueno.
+    "AZ Alkmaar": ["AZ Alkmaar neerlandés"],
+    "Antiguoko": ["Antiguoko donostiarra"],
     "Girondins de Burdeos": ["Girondins de Bordeaux"],
     "Mainz 05": ["Maguncia", "FSV Maguncia 05", "FSV Mainz 05"],
     "Liga de Campeones de la UEFA": [
-        "Liga de Campeones", "Champions League", "Champions", "Copa de Europa",
+        "Liga de Campeones",
+        "Champions League",
+        "Champions",
+        "Copa de Europa",
     ],
     "Copa de la UEFA": ["Liga Europa", "Europa League"],
     "Selección Argentina": ["Argentina"],
-    "Selección de fútbol de Italia": ["Selección italiana"],
+    "Selección de fútbol de Italia": ["Selección italiana",
+                                      "Selección nacional de Italia"],
     "R. C. D. Espanyol": ["Real Club Deportivo Espanyol", "Espanyol"],
     "Newell's Old Boys": ["Newell's Old Boys de Rosario"],
     "Louis van Gaal": ["Van Gaal", "van Gaal", "De Van Gaal"],
     "Pep Guardiola": ["Josep Guardiola", "Guardiola", "Pep"],
-    "José Mourinho": ["José Mário dos Santos Mourinho Félix",
-                      "José Manuel Mourinho Félix", "Mourinho"],
+    "José Mourinho": [
+        "José Mário dos Santos Mourinho Félix",
+        "José Manuel Mourinho Félix",
+        "Mourinho",
+    ],
     "Marcelo Bielsa": ["Marcelo Alberto Bielsa Caldera", "Bielsa"],
     "Johan Cruyff": ["Johann Cruyff", "Cruyff"],
     "Xavi Hernández": ["Xavi"],
@@ -59,8 +177,12 @@ ALIAS = {
     "Mauricio Pochettino": ["Mauricio Roberto Pochettino", "Pochettino"],
     # Traducciones de topónimos: ninguna metrica de cadenas las relaciona.
     "Eintracht Fráncfort": ["Eintracht Frankfurt", "Eintracht Francfort"],
-    "Bayern de Múnich": ["Bayern Munich", "Bayern de Munich", "FC Bayern de Múnich",
-                         "Bayern Múnich"],
+    "Bayern de Múnich": [
+        "Bayern Munich",
+        "Bayern de Munich",
+        "FC Bayern de Múnich",
+        "Bayern Múnich",
+    ],
     "Milan": ["AC Milan", "A. C. Milan", "Milán", "AC Milán"],
     "Inter de Milán": ["Inter de Milan", "Internazionale", "Inter"],
     "Oporto": ["Porto", "FC Porto"],
@@ -69,8 +191,13 @@ ALIAS = {
 }
 
 # Nodos que no son entidades y que las reglas automaticas no cazan.
-BORRAR_NODOS = [
-    "N/A", "unknown", "El", "Club", "Selección", "Competicion",
+DELETE_NODES = [
+    "N/A",
+    "unknown",
+    "El",
+    "Club",
+    "Selección",
+    "Competicion",
     "Premio Konex Diploma al Mérito 2010",
     "Entrenador sudamericano del año 2009",
     "semifinales de la Liga de Campeones",
@@ -78,33 +205,48 @@ BORRAR_NODOS = [
     "Serie A 1996-97 subcampeonato",
     # Fragmentos de frase que el modelo extrajo como si fueran entidades.
     # Forman islas desconectadas en el grafo.
-    "Se estrenó", "se estrenó", "pasó", "Pasó", "Trayectoria", "trayectoria",
-    "Técnico neerlandés", "técnico neerlandés", "Tecnico neerlandes",
+    "Se estrenó",
+    "se estrenó",
+    "pasó",
+    "Pasó",
+    "Trayectoria",
+    "trayectoria",
+    "Técnico neerlandés",
+    "técnico neerlandés",
+    "Tecnico neerlandes",
 ]
 
 # Relaciones extraidas mal, verificadas una a una contra la realidad.
 # (persona, tipo_relacion, entidad, motivo)
-BORRAR_RELACIONES = [
-    ("Arrigo Sacchi", "ENTRENO_A", "Real Madrid",
-     "fue director deportivo, no entrenador"),
-    ("Jürgen Norbert Klopp", "ENTRENO_A", "Selección de Alemania",
-     "nunca dirigio a la seleccion"),
-    ("Jürgen Norbert Klopp", "ENTRENO_A", "D-Juniors de Fráncfort",
-     "ahi jugo de nino, no entreno"),
-    ("Mauricio Pochettino", "JUGO_EN", "Paris Saint-Germain",
-     "lo entreno, no jugo"),
-    ("Xavi Hernández", "JUGO_EN", "Milan",
-     "nunca jugo en el Milan"),
-    ("Xavi Hernández", "ENTRENO_A", "Milan",
-     "nunca entreno al Milan"),
+DELETE_RELS = [
+    ("Arrigo Sacchi", "ENTRENO_A", "Real Madrid", "fue director deportivo"),
+    ("Arrigo Sacchi", "ENTRENO_A", "ACF Fiorentina", "nunca dirigio al Fiorentina"),
+    ("Jürgen Klopp", "ENTRENO_A", "Selección de Alemania", "nunca dirigio a Alemania"),
+    ("Jürgen Klopp", "ENTRENO_A", "D-Juniors de Fráncfort", "ahi jugo de nino"),
+    ("Mauricio Pochettino", "JUGO_EN", "Paris Saint-Germain", "lo entreno, no jugo"),
+    ("Mauricio Pochettino", "ENTRENO_A", "Manchester City", "nunca dirigio al City"),
+    ("Xavi Hernández", "JUGO_EN", "Milan", "nunca jugo en el Milan"),
+    ("Xavi Hernández", "ENTRENO_A", "Milan", "nunca entreno al Milan"),
+    # Mourinho: confusion de rol. En estos clubes jugo o fue ayudante,
+    # nunca primer entrenador. Detectado comparando contra Wikidata.
+    ("José Mourinho", "ENTRENO_A", "Rio Ave", "ahi jugo, no entreno"),
+    ("José Mourinho", "ENTRENO_A", "Vitória de Setúbal", "ahi jugo, no entreno"),
+    ("José Mourinho", "ENTRENO_A", "Sporting de Lisboa", "fue ayudante, no primero"),
+    ("José Mourinho", "ENTRENO_A", "FC Barcelona", "fue ayudante de Van Gaal"),
+    ("José Mourinho", "ENTRENO_A", "Paris Saint-Germain", "nunca dirigio al PSG"),
+    ("Mikel Arteta", "JUGO_EN", "Newcastle", "nunca jugo en el Newcastle"),
 ]
+
 
 # Lista blanca: para estas personas, SOLO estos clubes son correctos.
 # Se usa cuando un nodo de apellido suelto acumulo relaciones de otros y
 # las traspaso al fusionarse.
-CLUBES_VALIDOS = {
+CLUB_WHITELIST = {
     "Pep Guardiola": [
-        "FC Barcelona", "Bayern de Múnich", "Manchester City", "Barcelona B",
+        "FC Barcelona",
+        "Bayern de Múnich",
+        "Manchester City",
+        "Barcelona B",
     ],
     "Johan Cruyff": ["Ajax de Ámsterdam", "FC Barcelona"],
 }
@@ -112,18 +254,18 @@ CLUBES_VALIDOS = {
 
 # Anos y temporadas al final del nombre de una competicion.
 # "FA Cup 2010-11" -> "FA Cup" ; "Balon de Oro en 2011" -> "Balon de Oro"
-ANIO = re.compile(r"\s+(?:en\s+|de\s+|del\s+)?\d{4}(?:\s*[-/]\s*\d{2,4})?$")
+YEAR_RE = re.compile(r"\s+(?:en\s+|de\s+|del\s+)?\d{4}(?:\s*[-/]\s*\d{2,4})?$")
 
 
-def quitar_anio(nombre: str) -> str:
+def strip_year(nombre: str) -> str:
     previo = None
-    while previo != nombre:            # "Serie A 1996-97 2000" -> "Serie A"
+    while previo != nombre:  # "Serie A 1996-97 2000" -> "Serie A"
         previo = nombre
-        nombre = ANIO.sub("", nombre).strip()
+        nombre = YEAR_RE.sub("", nombre).strip()
     return nombre
 
 
-def normalizar_competiciones(g: Neo4jGraph, seco: bool) -> None:
+def strip_competition_years(g: Neo4jGraph, seco: bool) -> None:
     """Quita anos de los nombres de competicion y fusiona los duplicados.
 
     POR QUE AQUI Y NO EN EL PROMPT
@@ -132,12 +274,10 @@ def normalizar_competiciones(g: Neo4jGraph, seco: bool) -> None:
     Discutir con el modelo es una via muerta; quitar un ano del final de
     una cadena es una regex, determinista y verificable.
     """
-    filas = g.query(
-        "MATCH (c:Competicion) RETURN c.id AS id ORDER BY c.id"
-    )
+    filas = g.query("MATCH (c:Competicion) RETURN c.id AS id ORDER BY c.id")
     grupos: dict[str, list[str]] = {}
     for f in filas:
-        limpio = quitar_anio(f["id"])
+        limpio = strip_year(f["id"])
         if limpio:
             grupos.setdefault(limpio, []).append(f["id"])
 
@@ -162,28 +302,28 @@ def normalizar_competiciones(g: Neo4jGraph, seco: bool) -> None:
         )
 
 
-def conectar() -> Neo4jGraph:
-    return Neo4jGraph(
-        url=os.getenv("NEO4J_URI", "bolt://127.0.0.1:7687"),
-        username=os.getenv("NEO4J_USERNAME", "neo4j"),
-        password=os.getenv("NEO4J_PASSWORD", "graphrag2026"),
-        refresh_schema=False,
-    )
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--aplicar", action="store_true")
+    parser.add_argument("--apply", action="store_true")
+    parser.add_argument(
+        "--approve",
+        action="store_true",
+        help="marca merges.json con las decisiones revisadas",
+    )
     args = parser.parse_args()
-    g = conectar()
-    seco = not args.aplicar
+
+    if args.approve:
+        return approve()
+
+    g = connect()
+    seco = not args.apply
 
     if seco:
-        print("PREVISUALIZACION: no se modifica nada. Usa --aplicar.\n")
+        print("PREVISUALIZACION: no se modifica nada. Usa --apply.\n")
 
     # --- 1. Fusiones de alias ---------------------------------------------
     print("Alias:")
-    for canonico, variantes in ALIAS.items():
+    for canonico, variantes in ALIASES.items():
         presentes = g.query(
             "MATCH (n) WHERE n.id IN $ids RETURN collect(n.id) AS hay",
             {"ids": [canonico] + variantes},
@@ -219,7 +359,7 @@ def main() -> int:
     # --- 2. Nodos que no son entidades ------------------------------------
     hay = g.query(
         "MATCH (n) WHERE n.id IN $ids RETURN collect(n.id) AS hay",
-        {"ids": BORRAR_NODOS},
+        {"ids": DELETE_NODES},
     )[0]["hay"]
     print(f"\nNodos a borrar: {len(hay)}")
     for x in hay:
@@ -229,7 +369,7 @@ def main() -> int:
 
     # --- 3. Relaciones falsas ---------------------------------------------
     print("\nRelaciones falsas:")
-    for persona, tipo, entidad, motivo in BORRAR_RELACIONES:
+    for persona, tipo, entidad, motivo in DELETE_RELS:
         existe = g.query(
             f"MATCH ({{id: $p}})-[r:{tipo}]->({{id: $e}}) RETURN count(r) AS n",
             {"p": persona, "e": entidad},
@@ -245,7 +385,7 @@ def main() -> int:
 
     # --- 4. Listas blancas de clubes --------------------------------------
     print("\nClubes fuera de lista blanca:")
-    for persona, validos in CLUBES_VALIDOS.items():
+    for persona, validos in CLUB_WHITELIST.items():
         sobran = g.query(
             """
             MATCH ({id: $p})-[r:ENTRENO_A]->(c)
@@ -268,12 +408,12 @@ def main() -> int:
             )
 
     # --- 5. Anos en nombres de competicion --------------------------------
-    normalizar_competiciones(g, seco)
+    strip_competition_years(g, seco)
 
     total = g.query("MATCH (n) WHERE NOT n:Document RETURN count(*) AS n")[0]["n"]
     print(f"\n{total} entidades en el grafo")
     if seco:
-        print("Nada modificado. Repite con --aplicar para ejecutar.")
+        print("Nada modificado. Repite con --apply para ejecutar.")
     return 0
 
 

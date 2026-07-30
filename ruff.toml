@@ -1,0 +1,36 @@
+# Configuracion de ruff (linter y formateador de Python).
+#
+#     ruff check scripts          ver problemas
+#     ruff check scripts --fix    arreglar los automatizables
+#     ruff format scripts         formatear
+
+line-length = 88
+target-version = "py312"
+
+[lint]
+select = [
+    "E",      # errores de estilo (pycodestyle)
+    "F",      # errores reales: nombres sin definir, imports sin usar
+    "I",      # orden de los imports
+    "UP",     # sintaxis anticuada para la version de Python
+    "B",      # bugs frecuentes (flake8-bugbear)
+    "SIM",    # simplificaciones evidentes
+    "BLE",    # except demasiado amplios
+]
+
+ignore = [
+    # Los scripts son procesos por lotes que corren desatendidos: si falla la
+    # extraccion de un articulo o una consulta a Wikidata, interesa registrar
+    # el error y seguir con el siguiente, no abortar el lote entero. Ahi un
+    # `except Exception` es la decision correcta, no un descuido.
+    "BLE001",
+]
+
+[lint.per-file-ignores]
+# build_site.py lleva incrustada una plantilla HTML/CSS/JS completa. Aplicar
+# el limite de longitud de linea de Python a codigo HTML no tiene sentido.
+"scripts/build_site.py" = ["E501"]
+
+# ground_truth.py se genera automaticamente desde Wikidata: no tiene sentido
+# aplicarle reglas de estilo a un fichero que nadie edita a mano.
+"scripts/ground_truth.py" = ["ALL"]

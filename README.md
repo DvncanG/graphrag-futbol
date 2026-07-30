@@ -111,44 +111,56 @@ pip install -r requirements.txt
 docker compose up -d
 
 # Verificación: NO seguir si algo sale en rojo
-python scripts/smoke_test.py
+python scripts/clients.py
 ```
 
-El `smoke_test.py` comprueba, de lo barato a lo caro: conexión Bolt, versión
+Ejecutar `clients.py` directamente comprueba, de lo barato a lo caro: conexión Bolt, versión
 de Neo4j, APOC, disponibilidad de los modelos, dimensión de los embeddings y
 —lo crítico— que el LLM sepa devolver salida estructurada. Si eso último
 falla, el pipeline entero es inviable, y es mejor saberlo en 30 segundos que
 en el paso 3.
+
+El proyecto pasa `ruff check` sin avisos. La configuración está en
+`ruff.toml`, con dos excepciones documentadas: los `except Exception` de los
+procesos por lotes (interesa registrar el fallo y seguir, no abortar) y el
+límite de longitud de línea en `build_site.py`, que lleva incrustada una
+plantilla HTML.
+
+```bash
+ruff check scripts        # ver problemas
+ruff check scripts --fix  # arreglar los automatizables
+ruff format scripts       # formatear
+```
 
 ---
 
 ## Pipeline
 
 ```bash
-python scripts/download_corpus.py          # 14 artículos de Wikipedia (es)
+python scripts/ingest.py --download          # 14 artículos de Wikipedia (es)
 python scripts/ingest.py --reset           # ~5 min con GPU
-python scripts/resolver_entidades2.py --limpiar              # previsualiza ruido
-python scripts/resolver_entidades2.py --limpiar --confirmar  # borra
-python scripts/resolver_entidades2.py --proponer             # candidatos a fusión
-python scripts/aprobar.py                                    # aplica decisiones revisadas
-python scripts/resolver_entidades2.py --aplicar              # fusiona
+python scripts/dedupe.py --clean              # previsualiza ruido
+python scripts/dedupe.py --clean --confirm  # borra
+python scripts/dedupe.py --propose             # candidatos a fusión
+python scripts/curate.py --approve                     # aplica decisiones revisadas
+python scripts/dedupe.py --apply              # fusiona
 ```
 
 ```bash
-python scripts/correcciones.py --aplicar   # alias manuales y relaciones falsas
-python scripts/indexar.py                  # índice vectorial
-python scripts/consultar.py                # preguntas en lenguaje natural
-python scripts/exportar_web.py             # genera docs/index.html
+python scripts/curate.py --apply   # alias manuales y relaciones falsas
+python scripts/query.py --index          # índice vectorial
+python scripts/query.py                # preguntas en lenguaje natural
+python scripts/build_site.py             # genera docs/index.html
 ```
 
 La deduplicación es **iterativa**: cada fusión puede destapar duplicados que
-antes quedaban ocultos. Repetir `--proponer` / `aprobar.py` / `--aplicar`
+antes quedaban ocultos. Repetir `--propose` / `--approve` / `--apply`
 hasta que no aparezca nada nuevo.
 
 Todo el pipeline es reproducible: el grafo depurado se reconstruye desde cero
 ejecutando esa secuencia, sin ninguna intervención manual. Las decisiones que
-requirieron criterio humano viven en `aprobar.py` (fusiones revisadas) y
-`correcciones.py` (alias entre idiomas, relaciones verificadas como falsas).
+requirieron criterio humano viven todas en `curate.py`:
+fusiones revisadas, alias entre idiomas y relaciones verificadas como falsas.
 
 ---
 
@@ -174,8 +186,9 @@ La solución es `ignore_tool_usage=True`, que mete el esquema en el prompt.
 Contrapartida: es incompatible con `node_properties`, así que se renuncia a
 las propiedades de nodo.
 
-`scripts/debug_extraccion.py` reproduce el diagnóstico comparando cuatro
-configuraciones sobre el mismo fragmento.
+El diagnóstico se hizo comparando cuatro configuraciones (con y sin
+esquema, con y sin `strict_mode`, con y sin tool calling) sobre el mismo
+fragmento de texto.
 
 ### 2. Ninguna métrica sola resuelve la resolución de entidades
 
@@ -260,7 +273,7 @@ diluyó el fragmento de texto que contenía la respuesta. GraphRAG gana en
 preguntas relacionales y **estorba** en preguntas factuales cuya respuesta
 está en un solo párrafo.
 
-De ahí el enrutado por tipo de pregunta implementado en `consultar.py`: si se
+De ahí el enrutado por tipo de pregunta implementado en `query.py`: si se
 detectan dos o más entidades en la pregunta, se calcula el camino entre ellas
 con `shortestPath` y se inyecta al principio del contexto. Con una sola
 entidad, basta la búsqueda vectorial.
@@ -304,7 +317,7 @@ modelo siguió generando "FA Cup 2010-11" y "Balón de Oro en 2011".
 
 La solución no fue insistir en el prompt sino **normalizar después**: una
 expresión regular que quita el año del final del nombre y fusiona los
-duplicados resultantes (`correcciones.py`). Determinista, verificable, y no
+duplicados resultantes (`curate.py`). Determinista, verificable, y no
 depende de que nadie obedezca.
 
 ---
@@ -382,19 +395,26 @@ graphrag-futbol/
 ├── data/
 │   ├── corpus/           # artículos descargados
 │   └── merges.json       # decisiones de fusión revisadas
+├── docs/                 # publicado en GitHub Pages
+│   └── index.html        # visualización interactiva
 └── scripts/
-    ├── smoke_test.py           # verificación de infraestructura
-    ├── download_corpus.py      # descarga de Wikipedia
-    ├── esquema.py              # tipos de nodo y relación permitidos
-    ├── ingest.py               # chunking + extracción + carga
-    ├── debug_extraccion.py     # diagnóstico de la extracción
-    ├── resolver_entidades2.py  # limpieza y deduplicación
-    ├── aprobar.py              # decisiones de fusión, en código
-    ├── correcciones.py         # alias manuales y relaciones falsas
-    ├── indexar.py              # índice vectorial
-    ├── consultar.py            # preguntas en lenguaje natural
-    └── exportar_web.py         # genera la visualización de docs/
+    ├── clients.py        # conexiones a Neo4j y Ollama (y su verificación)
+    ├── names.py          # normalización de nombres de entidad
+    ├── schema.py         # datos: tipos permitidos e instrucciones
+    ├── ingest.py         # descarga del corpus + extracción + carga
+    ├── dedupe.py         # resolución de entidades automática
+    ├── curate.py         # decisiones humanas: alias y relaciones falsas
+    ├── evaluate.py       # precisión y cobertura contra Wikidata
+    ├── query.py          # índice vectorial + preguntas en lenguaje natural
+    └── build_site.py     # genera docs/index.html
 ```
+
+`schema.py` y el generado `ground_truth.py` son **datos**, no lógica: definen
+qué puede extraer el modelo y qué sabemos que es cierto. Separarlos permite
+iterar sobre ellos sin tocar el código que los consume.
+
+El código está en inglés (convención del sector y del ecosistema de
+dependencias); los comentarios y esta documentación, en español.
 
 ---
 

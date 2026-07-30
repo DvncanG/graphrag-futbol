@@ -9,11 +9,11 @@ conecta con nada.
 Al cerrarlo, obligamos al modelo a encajar todo lo que lee en estas cajas.
 Extrae menos, pero lo que extrae es consistente y consultable.
 
-Regla practica: empieza con POCOS tipos. Es mas facil anadir uno que limpiar
+Regla practica: empieza con POCOS tipos. Es mas facil anadir uno que clean
 un grafo lleno de duplicados semanticos.
 """
 
-NODOS_PERMITIDOS = [
+ALLOWED_NODES = [
     "Entrenador",
     "Jugador",
     "Club",
@@ -24,7 +24,7 @@ NODOS_PERMITIDOS = [
 
 # Tuplas (origen, RELACION, destino). Restringir tambien los extremos evita
 # barbaridades como (Competicion)-[ENTRENO_A]->(Jugador).
-RELACIONES_PERMITIDAS = [
+ALLOWED_RELATIONSHIPS = [
     ("Entrenador", "ENTRENO_A", "Club"),
     ("Entrenador", "ENTRENO_A", "Seleccion"),
     ("Entrenador", "INFLUYO_EN", "Entrenador"),
@@ -45,12 +45,12 @@ RELACIONES_PERMITIDAS = [
 # nosotros extraemos por prompt (ignore_tool_usage=True) porque es la unica
 # forma de que Ollama respete el esquema. Se queda aqui por si algun dia
 # migramos a un modelo por API, donde si se podria activar.
-PROPIEDADES_NODO = ["nacionalidad", "anio_inicio", "anio_fin"]
+NODE_PROPERTIES = ["nacionalidad", "anio_inicio", "anio_fin"]
 
 # Se inyecta en el prompt de extraccion. Aqui es donde se corrigen los fallos
 # que veas al inspeccionar el grafo: si el modelo confunde jugar con entrenar,
 # lo dices explicitamente aqui.
-INSTRUCCIONES_EXTRA = """
+EXTRA_INSTRUCTIONS = """
 Estas analizando biografias de entrenadores de futbol en espanol.
 
 Reglas estrictas:

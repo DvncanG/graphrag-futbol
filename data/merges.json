@@ -1,88 +1,33 @@
 [
   {
-    "detector": "errata",
-    "tipo": "Competicion",
-    "canonico": "Balón de Oro en 2011",
+    "detector": "apellido",
+    "tipo": "Entrenador",
+    "canonico": "Frank Rijkaard",
     "variantes": [
-      "Balón de Oro en 2011",
-      "Balón de Oro en 2010"
+      "Frank Rijkaard",
+      "Rijkaard"
     ],
     "aprobado": false,
-    "nota": "revisar: difieren en 1-2 letras"
-  },
-  {
-    "detector": "errata",
-    "tipo": "Competicion",
-    "canonico": "Copa América 1999",
-    "variantes": [
-      "Copa América 1999",
-      "Copa América 1993"
-    ],
-    "aprobado": false,
-    "nota": "revisar: difieren en 1-2 letras"
-  },
-  {
-    "detector": "errata",
-    "tipo": "Competicion",
-    "canonico": "Copa de Italia 1986",
-    "variantes": [
-      "Copa de Italia 1986",
-      "Copa de Italia 1984"
-    ],
-    "aprobado": false,
-    "nota": "revisar: difieren en 1-2 letras"
-  },
-  {
-    "detector": "errata",
-    "tipo": "Competicion",
-    "canonico": "Equipo del Año de la UEFA en 2012",
-    "variantes": [
-      "Equipo del Año de la UEFA en 2012",
-      "Equipo del Año de la UEFA en 2011"
-    ],
-    "aprobado": false,
-    "nota": "revisar: difieren en 1-2 letras"
-  },
-  {
-    "detector": "errata",
-    "tipo": "Competicion",
-    "canonico": "FIFA FIFPro World XI en 2012",
-    "variantes": [
-      "FIFA FIFPro World XI en 2012",
-      "FIFA FIFPro World XI en 2011"
-    ],
-    "aprobado": false,
-    "nota": "revisar: difieren en 1-2 letras"
-  },
-  {
-    "detector": "errata",
-    "tipo": "Competicion",
-    "canonico": "Ligue 1 2022-23",
-    "variantes": [
-      "Ligue 1 2022-23",
-      "Ligue 1 2012-13"
-    ],
-    "aprobado": false,
-    "nota": "revisar: difieren en 1-2 letras"
-  },
-  {
-    "detector": "errata",
-    "tipo": "Competicion",
-    "canonico": "The Best 2020",
-    "variantes": [
-      "The Best 2020",
-      "The Best 2019"
-    ],
-    "aprobado": false,
-    "nota": "revisar: difieren en 1-2 letras"
+    "nota": "revisar: apellido suelto"
   },
   {
     "detector": "prefijo",
     "tipo": "Club",
-    "canonico": "Newell's Old Boys de Rosario Divisiones inferiores",
+    "canonico": "AZ Alkmaar neerlandés",
     "variantes": [
-      "Newell's Old Boys de Rosario Divisiones inferiores",
-      "Newell's Old Boys"
+      "AZ Alkmaar neerlandés",
+      "AZ Alkmaar"
+    ],
+    "aprobado": false,
+    "nota": "revisar: forma corta contenida"
+  },
+  {
+    "detector": "prefijo",
+    "tipo": "Club",
+    "canonico": "Antiguoko donostiarra",
+    "variantes": [
+      "Antiguoko donostiarra",
+      "Antiguoko"
     ],
     "aprobado": false,
     "nota": "revisar: forma corta contenida"
@@ -90,9 +35,9 @@
   {
     "detector": "prefijo",
     "tipo": "Competicion",
-    "canonico": "Copa Intercontinental de la FIFA 2024",
+    "canonico": "Copa Intercontinental de la FIFA",
     "variantes": [
-      "Copa Intercontinental de la FIFA 2024",
+      "Copa Intercontinental de la FIFA",
       "Copa Intercontinental"
     ],
     "aprobado": false,
@@ -101,76 +46,10 @@
   {
     "detector": "prefijo",
     "tipo": "Competicion",
-    "canonico": "Copa de Francia 2022",
+    "canonico": "Primera división de Argentina Clausura",
     "variantes": [
-      "Copa de Francia 2022",
-      "Copa de Francia"
-    ],
-    "aprobado": false,
-    "nota": "revisar: forma corta contenida"
-  },
-  {
-    "detector": "prefijo",
-    "tipo": "Competicion",
-    "canonico": "Copa de la UEFA 2005-06",
-    "variantes": [
-      "Copa de la UEFA 2005-06",
-      "Copa de la UEFA"
-    ],
-    "aprobado": false,
-    "nota": "revisar: forma corta contenida"
-  },
-  {
-    "detector": "prefijo",
-    "tipo": "Competicion",
-    "canonico": "FA Cup 2010-11",
-    "variantes": [
-      "FA Cup 2010-11",
-      "FA Cup"
-    ],
-    "aprobado": false,
-    "nota": "revisar: forma corta contenida"
-  },
-  {
-    "detector": "prefijo",
-    "tipo": "Competicion",
-    "canonico": "Supercopa de Europa 1999-2000",
-    "variantes": [
-      "Supercopa de Europa 1999-2000",
-      "Supercopa de Europa"
-    ],
-    "aprobado": false,
-    "nota": "revisar: forma corta contenida"
-  },
-  {
-    "detector": "prefijo",
-    "tipo": "Competicion",
-    "canonico": "Supercopa de Francia 2021",
-    "variantes": [
-      "Supercopa de Francia 2021",
-      "Supercopa de Francia"
-    ],
-    "aprobado": false,
-    "nota": "revisar: forma corta contenida"
-  },
-  {
-    "detector": "prefijo",
-    "tipo": "Competicion",
-    "canonico": "Supercopa de Italia 1999-2000",
-    "variantes": [
-      "Supercopa de Italia 1999-2000",
-      "Supercopa de Italia"
-    ],
-    "aprobado": false,
-    "nota": "revisar: forma corta contenida"
-  },
-  {
-    "detector": "prefijo",
-    "tipo": "Competicion",
-    "canonico": "Torneo Clausura 1998",
-    "variantes": [
-      "Torneo Clausura 1998",
-      "Torneo Clausura"
+      "Primera división de Argentina Clausura",
+      "Primera división de Argentina"
     ],
     "aprobado": false,
     "nota": "revisar: forma corta contenida"
