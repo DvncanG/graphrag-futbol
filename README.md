@@ -199,18 +199,19 @@ y el grafo no lo sabía.
 
 ### 3. `shortestPath` encuentra caminos, no verdades
 
-Primer resultado de la consulta estrella, antes de filtrar tipos de relación:
-
-```
-Bielsa ─JUGO_EN─▶ Newell's ◀─MENTIONS─ (Doc) ─MENTIONS─▶ PSG ─...─▶ Arteta
-```
+### 3. `shortestPath` encuentra caminos, no verdades
 
 `MENTIONS` es fontanería del pipeline (`include_source=True`) y sólo significa
 "estas dos entidades salieron en el mismo artículo". Como conecta cualquier
-cosa con cualquier cosa, `shortestPath` la usa siempre de atajo y produce
-caminos sintácticamente válidos y semánticamente vacíos.
+cosa con cualquier cosa, `shortestPath` la usa siempre de atajo:
 
-Hay que restringir explícitamente a relaciones de dominio:
+![Camino inválido](docs/camino-mentions.png)
+
+Dos de las cuatro aristas son relaciones reales. Pero el nodo central es un
+`Document`, así que el camino es sintácticamente válido y semánticamente
+vacío.
+
+Restringiendo explícitamente a relaciones de dominio:
 
 ```cypher
 MATCH camino = shortestPath(
@@ -220,6 +221,10 @@ MATCH camino = shortestPath(
 )
 RETURN camino
 ```
+
+![Camino válido](docs/camino-valido.png)
+
+Cuatro saltos, todos verificados manualmente.
 
 Y aun así, **cada arista del camino debe auditarse a mano** antes de darla por
 buena: un camino con una relación alucinada se ve exactamente igual de bien.
