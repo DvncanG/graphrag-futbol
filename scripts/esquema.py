@@ -33,7 +33,12 @@ RELACIONES_PERMITIDAS = [
     ("Jugador", "JUGO_EN", "Club"),
     ("Jugador", "ENTRENADO_POR", "Entrenador"),
     ("Club", "GANO", "Competicion"),
-    ("Entrenador", "GANO", "Competicion"),
+    # Separado por rol: casi todos los entrenadores de elite fueron antes
+    # jugadores, y "cuantas Champions tiene Ancelotti" tiene dos respuestas
+    # distintas (2 como jugador, 5 como entrenador). Con un unico GANO la
+    # pregunta es irresoluble.
+    ("Entrenador", "GANO_COMO_ENTRENADOR", "Competicion"),
+    ("Jugador", "GANO_COMO_JUGADOR", "Competicion"),
 ]
 
 # SIN USO ACTUALMENTE. node_properties exige function calling nativo, y
@@ -68,6 +73,16 @@ Reglas estrictas:
   tiki-taka, gegenpressing, catenaccio, juego de posicion.
 - Usa siempre el nombre mas completo y canonico de la entidad. "Pep" y
   "Guardiola" son el mismo nodo: Pep Guardiola.
+- Los titulos SIEMPRE se atribuyen con rol. Las secciones de palmares de
+  Wikipedia suelen venir separadas en "Como jugador" y "Como entrenador":
+  respeta esa division. Si el texto describe la etapa de entrenador, usa
+  GANO_COMO_ENTRENADOR; si describe la de jugador, GANO_COMO_JUGADOR.
+  Si el rol no se puede determinar con seguridad, NO extraigas el titulo.
+- NO incluyas anos ni temporadas en el nombre de la competicion: escribe
+  "Liga de Campeones de la UEFA", nunca "Liga de Campeones 2014". Probado:
+  el modelo desplaza las fechas y triplica los nodos sin ganar precision.
+- Extrae un titulo SOLO si se gano. Subcampeonatos, finales perdidas y
+  puestos en la clasificacion NO son victorias.
 - Si un fragmento no contiene ninguna relacion clara, no extraigas nada.
   Es preferible un grafo pequeno y correcto a uno grande y sucio.
 """

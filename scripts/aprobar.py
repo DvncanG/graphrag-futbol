@@ -99,11 +99,13 @@ def main() -> int:
 
     aprobados = 0
     for g in grupos:
-        if g["canonico"] in APROBAR:
-            g["aprobado"] = True
-            aprobados += 1
-        else:
-            g["aprobado"] = False
+        # Los de 'normalizacion' se aprueban en bloque: la clave normalizada
+        # es igualdad exacta, no parecido, y en la revision manual no dio
+        # ni un falso positivo. Identificarlos por 'canonico' era fragil,
+        # porque ese nombre lo elige el propio script y cambia entre ingestas.
+        aprobar = g["detector"] == "normalizacion" or g["canonico"] in APROBAR
+        g["aprobado"] = aprobar
+        aprobados += aprobar
 
     # Evita duplicar los manuales si el script se ejecuta dos veces
     existentes = {g["canonico"] for g in grupos if g["detector"] == "manual"}

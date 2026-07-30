@@ -1,33 +1,11 @@
 [
   {
-    "detector": "apellido",
-    "tipo": "Entrenador",
-    "canonico": "Johan Cruyff",
-    "variantes": [
-      "Johan Cruyff",
-      "Cruyff"
-    ],
-    "aprobado": true,
-    "nota": "revisar: apellido suelto"
-  },
-  {
-    "detector": "apellido",
-    "tipo": "Entrenador",
-    "canonico": "José Mourinho",
-    "variantes": [
-      "José Mourinho",
-      "Mourinho"
-    ],
-    "aprobado": false,
-    "nota": "revisar: apellido suelto"
-  },
-  {
     "detector": "errata",
     "tipo": "Competicion",
-    "canonico": "Campeonato Europeo de Fútbol (UEFA Euro) 2012",
+    "canonico": "Balón de Oro en 2011",
     "variantes": [
-      "Campeonato Europeo de Fútbol (UEFA Euro) 2012",
-      "Campeonato Europeo de Fútbol (UEFA Euro) 2008"
+      "Balón de Oro en 2011",
+      "Balón de Oro en 2010"
     ],
     "aprobado": false,
     "nota": "revisar: difieren en 1-2 letras"
@@ -35,10 +13,10 @@
   {
     "detector": "errata",
     "tipo": "Competicion",
-    "canonico": "Copa América 1993",
+    "canonico": "Copa América 1999",
     "variantes": [
-      "Copa América 1993",
-      "Copa América 1991"
+      "Copa América 1999",
+      "Copa América 1993"
     ],
     "aprobado": false,
     "nota": "revisar: difieren en 1-2 letras"
@@ -46,10 +24,10 @@
   {
     "detector": "errata",
     "tipo": "Competicion",
-    "canonico": "Copa Confederaciones 2013",
+    "canonico": "Copa de Italia 1986",
     "variantes": [
-      "Copa Confederaciones 2013",
-      "Copa Confederaciones 2009"
+      "Copa de Italia 1986",
+      "Copa de Italia 1984"
     ],
     "aprobado": false,
     "nota": "revisar: difieren en 1-2 letras"
@@ -57,10 +35,10 @@
   {
     "detector": "errata",
     "tipo": "Competicion",
-    "canonico": "Liga de las temporadas 1998-1999",
+    "canonico": "Equipo del Año de la UEFA en 2012",
     "variantes": [
-      "Liga de las temporadas 1998-1999",
-      "Liga de las temporadas 1997-1998"
+      "Equipo del Año de la UEFA en 2012",
+      "Equipo del Año de la UEFA en 2011"
     ],
     "aprobado": false,
     "nota": "revisar: difieren en 1-2 letras"
@@ -68,10 +46,10 @@
   {
     "detector": "errata",
     "tipo": "Competicion",
-    "canonico": "Recopa de Europa",
+    "canonico": "FIFA FIFPro World XI en 2012",
     "variantes": [
-      "Recopa de Europa",
-      "Copa de Europa"
+      "FIFA FIFPro World XI en 2012",
+      "FIFA FIFPro World XI en 2011"
     ],
     "aprobado": false,
     "nota": "revisar: difieren en 1-2 letras"
@@ -79,21 +57,21 @@
   {
     "detector": "errata",
     "tipo": "Competicion",
-    "canonico": "UEFA Champions League 2019",
+    "canonico": "Ligue 1 2022-23",
     "variantes": [
-      "UEFA Champions League 2019",
-      "UEFA Champions League 2018"
+      "Ligue 1 2022-23",
+      "Ligue 1 2012-13"
     ],
     "aprobado": false,
     "nota": "revisar: difieren en 1-2 letras"
   },
   {
     "detector": "errata",
-    "tipo": "Jugador",
-    "canonico": "Ronaldo",
+    "tipo": "Competicion",
+    "canonico": "The Best 2020",
     "variantes": [
-      "Ronaldo",
-      "Rivaldo"
+      "The Best 2020",
+      "The Best 2019"
     ],
     "aprobado": false,
     "nota": "revisar: difieren en 1-2 letras"
@@ -101,32 +79,10 @@
   {
     "detector": "prefijo",
     "tipo": "Club",
-    "canonico": "Ajax de Ámsterdam",
+    "canonico": "Newell's Old Boys de Rosario Divisiones inferiores",
     "variantes": [
-      "Ajax de Ámsterdam",
-      "Ajax"
-    ],
-    "aprobado": true,
-    "nota": "revisar: forma corta contenida"
-  },
-  {
-    "detector": "prefijo",
-    "tipo": "Club",
-    "canonico": "Atlético de Madrid",
-    "variantes": [
-      "Atlético de Madrid",
-      "Atlético"
-    ],
-    "aprobado": true,
-    "nota": "revisar: forma corta contenida"
-  },
-  {
-    "detector": "prefijo",
-    "tipo": "Club",
-    "canonico": "Eintracht Fráncfort II",
-    "variantes": [
-      "Eintracht Fráncfort II",
-      "Eintracht Fráncfort"
+      "Newell's Old Boys de Rosario Divisiones inferiores",
+      "Newell's Old Boys"
     ],
     "aprobado": false,
     "nota": "revisar: forma corta contenida"
@@ -145,9 +101,9 @@
   {
     "detector": "prefijo",
     "tipo": "Competicion",
-    "canonico": "Copa de Francia 2021",
+    "canonico": "Copa de Francia 2022",
     "variantes": [
-      "Copa de Francia 2021",
+      "Copa de Francia 2022",
       "Copa de Francia"
     ],
     "aprobado": false,
@@ -167,10 +123,10 @@
   {
     "detector": "prefijo",
     "tipo": "Competicion",
-    "canonico": "Liga Europa Conferencia",
+    "canonico": "FA Cup 2010-11",
     "variantes": [
-      "Liga Europa Conferencia",
-      "Liga Europa"
+      "FA Cup 2010-11",
+      "FA Cup"
     ],
     "aprobado": false,
     "nota": "revisar: forma corta contenida"
@@ -178,31 +134,9 @@
   {
     "detector": "prefijo",
     "tipo": "Competicion",
-    "canonico": "Liga española de fútbol",
+    "canonico": "Supercopa de Europa 1999-2000",
     "variantes": [
-      "Liga española de fútbol",
-      "Liga española"
-    ],
-    "aprobado": true,
-    "nota": "revisar: forma corta contenida"
-  },
-  {
-    "detector": "prefijo",
-    "tipo": "Competicion",
-    "canonico": "Premier League 2019-20",
-    "variantes": [
-      "Premier League 2019-20",
-      "Premier League"
-    ],
-    "aprobado": false,
-    "nota": "revisar: forma corta contenida"
-  },
-  {
-    "detector": "prefijo",
-    "tipo": "Competicion",
-    "canonico": "Supercopa de Europa 2019-20",
-    "variantes": [
-      "Supercopa de Europa 2019-20",
+      "Supercopa de Europa 1999-2000",
       "Supercopa de Europa"
     ],
     "aprobado": false,
@@ -215,6 +149,28 @@
     "variantes": [
       "Supercopa de Francia 2021",
       "Supercopa de Francia"
+    ],
+    "aprobado": false,
+    "nota": "revisar: forma corta contenida"
+  },
+  {
+    "detector": "prefijo",
+    "tipo": "Competicion",
+    "canonico": "Supercopa de Italia 1999-2000",
+    "variantes": [
+      "Supercopa de Italia 1999-2000",
+      "Supercopa de Italia"
+    ],
+    "aprobado": false,
+    "nota": "revisar: forma corta contenida"
+  },
+  {
+    "detector": "prefijo",
+    "tipo": "Competicion",
+    "canonico": "Torneo Clausura 1998",
+    "variantes": [
+      "Torneo Clausura 1998",
+      "Torneo Clausura"
     ],
     "aprobado": false,
     "nota": "revisar: forma corta contenida"

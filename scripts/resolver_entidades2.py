@@ -271,7 +271,25 @@ def proponer(grafo: Neo4jGraph) -> int:
             if base(largo["nombre"]).split()[-1] == base(corto["nombre"]):
                 pares_apellido.append((corto["nombre"], largo["nombre"]))
 
-    # Detector 4: erratas de una o dos letras ('Johann' vs 'Johan').
+    # Detector 4: subconjunto de palabras. Caza el segundo nombre:
+    # 'Jurgen Klopp' vs 'Jurgen Norbert Klopp', 'Diego Simeone' vs
+    # 'Diego Pablo Simeone'. Ningun otro detector llega: no es prefijo,
+    # no es apellido suelto, y la distancia de edicion es enorme.
+    # Exigimos que coincidan primera y ultima palabra, lo que descarta
+    # hermanos ('Marcelo Bielsa' vs 'Rafael Bielsa').
+    pares_subconjunto = []
+    for corto in entidades:
+        tc = base(corto["nombre"]).split()
+        if corto["tipo"] not in ("Entrenador", "Jugador") or len(tc) < 2:
+            continue
+        for largo in entidades:
+            tl = base(largo["nombre"]).split()
+            if largo["tipo"] != corto["tipo"] or len(tl) <= len(tc):
+                continue
+            if tc[0] == tl[0] and tc[-1] == tl[-1] and set(tc) <= set(tl):
+                pares_subconjunto.append((corto["nombre"], largo["nombre"]))
+
+    # Detector 5: erratas de una o dos letras ('Johann' vs 'Johan').
     pares_errata = []
     vistos: set[tuple[str, str]] = set()
     for a in entidades:
@@ -290,6 +308,8 @@ def proponer(grafo: Neo4jGraph) -> int:
     print("Detectores debiles:")
     emitir_pares("prefijo", pares_prefijo, "revisar: forma corta contenida")
     emitir_pares("apellido", pares_apellido, "revisar: apellido suelto")
+    emitir_pares("subconjunto", pares_subconjunto,
+                 "revisar: mismo nombre y apellido, distinto segundo nombre")
     emitir_pares("errata", pares_errata, "revisar: difieren en 1-2 letras")
 
     grupos.sort(key=lambda g: (g["detector"], g["tipo"], g["canonico"]))

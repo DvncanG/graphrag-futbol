@@ -6,6 +6,9 @@ recorrer varias relaciones encadenadas.
 
 Todo corre **en local**: sin claves de API, sin coste por token.
 
+**[▶ Explorar el grafo](https://dvncang.github.io/graphrag-futbol/)** — visualización
+interactiva: busca entidades y traza el camino entre dos personas.
+
 ---
 
 ## La pregunta que justifica el proyecto
@@ -75,8 +78,14 @@ inservible porque nada conecta con nada.
 (Entrenador) ─PRACTICA─────────▶ (EstiloJuego)
 (Jugador)    ─JUGO_EN──────────▶ (Club)
 (Jugador)    ─ENTRENADO_POR────▶ (Entrenador)
-(Club | Entrenador) ─GANO──────▶ (Competicion)
+(Club)       ─GANO────────────▶ (Competicion)
+(Entrenador) ─GANO_COMO_ENTRENADOR─▶ (Competicion)
+(Jugador)    ─GANO_COMO_JUGADOR────▶ (Competicion)
 ```
+
+`GANO` se separa por rol porque casi todos los entrenadores de élite fueron
+antes jugadores: "cuántas Champions tiene Ancelotti" son 2 como jugador y 5
+como entrenador. Con una relación única la pregunta es irresoluble.
 
 Restringir también los extremos de cada relación evita disparates como
 `(Competicion)-[ENTRENO_A]->(Jugador)`.
@@ -125,9 +134,21 @@ python scripts/aprobar.py                                    # aplica decisiones
 python scripts/resolver_entidades2.py --aplicar              # fusiona
 ```
 
+```bash
+python scripts/correcciones.py --aplicar   # alias manuales y relaciones falsas
+python scripts/indexar.py                  # índice vectorial
+python scripts/consultar.py                # preguntas en lenguaje natural
+python scripts/exportar_web.py             # genera docs/index.html
+```
+
 La deduplicación es **iterativa**: cada fusión puede destapar duplicados que
-antes quedaban ocultos. Repetir `--proponer` / `--aplicar` hasta que no
-aparezca nada nuevo.
+antes quedaban ocultos. Repetir `--proponer` / `aprobar.py` / `--aplicar`
+hasta que no aparezca nada nuevo.
+
+Todo el pipeline es reproducible: el grafo depurado se reconstruye desde cero
+ejecutando esa secuencia, sin ninguna intervención manual. Las decisiones que
+requirieron criterio humano viven en `aprobar.py` (fusiones revisadas) y
+`correcciones.py` (alias entre idiomas, relaciones verificadas como falsas).
 
 ---
 
@@ -199,19 +220,18 @@ y el grafo no lo sabía.
 
 ### 3. `shortestPath` encuentra caminos, no verdades
 
-### 3. `shortestPath` encuentra caminos, no verdades
+Primer resultado de la consulta estrella, antes de filtrar tipos de relación:
+
+```
+Bielsa ─JUGO_EN─▶ Newell's ◀─MENTIONS─ (Doc) ─MENTIONS─▶ PSG ─...─▶ Arteta
+```
 
 `MENTIONS` es fontanería del pipeline (`include_source=True`) y sólo significa
 "estas dos entidades salieron en el mismo artículo". Como conecta cualquier
-cosa con cualquier cosa, `shortestPath` la usa siempre de atajo:
+cosa con cualquier cosa, `shortestPath` la usa siempre de atajo y produce
+caminos sintácticamente válidos y semánticamente vacíos.
 
-![Camino inválido](docs/camino-mentions.png)
-
-Dos de las cuatro aristas son relaciones reales. Pero el nodo central es un
-`Document`, así que el camino es sintácticamente válido y semánticamente
-vacío.
-
-Restringiendo explícitamente a relaciones de dominio:
+Hay que restringir explícitamente a relaciones de dominio:
 
 ```cypher
 MATCH camino = shortestPath(
@@ -222,12 +242,70 @@ MATCH camino = shortestPath(
 RETURN camino
 ```
 
-![Camino válido](docs/camino-valido.png)
-
-Cuatro saltos, todos verificados manualmente.
-
 Y aun así, **cada arista del camino debe auditarse a mano** antes de darla por
 buena: un camino con una relación alucinada se ve exactamente igual de bien.
+
+### 4. Más contexto no es mejor contexto
+
+Comparando ambos modos sobre la misma pregunta factual ("¿cuántas Champions
+ganó Ancelotti?"):
+
+```
+RAG plano   4.682 caracteres de contexto  → respuesta correcta
+GraphRAG    9.233 caracteres, 102 hechos  → respuesta peor
+```
+
+La expansión por grafo aportaba **una** línea útil y noventa de ruido, y
+diluyó el fragmento de texto que contenía la respuesta. GraphRAG gana en
+preguntas relacionales y **estorba** en preguntas factuales cuya respuesta
+está en un solo párrafo.
+
+De ahí el enrutado por tipo de pregunta implementado en `consultar.py`: si se
+detectan dos o más entidades en la pregunta, se calcula el camino entre ellas
+con `shortestPath` y se inyecta al principio del contexto. Con una sola
+entidad, basta la búsqueda vectorial.
+
+| Tipo | Ejemplo | Estrategia |
+|---|---|---|
+| Factual | "¿En qué año nació X?" | Vectorial a secas |
+| Relacional | "¿Qué conecta a X con Y?" | Vectorial + `shortestPath` |
+| Agregativa | "¿Cuántas X ganó Y?" | Requiere Cypher generado (pendiente) |
+
+### 5. Un RAG mezcla el contexto con lo que el modelo ya sabía
+
+Preguntado por los títulos de Ancelotti, el sistema respondió con años
+concretos (2003, 2007, 2014, 2016, 2024). El grafo solo contiene **una**
+relación `GANO_COMO_ENTRENADOR` hacia la Liga de Campeones, sin años: parte
+de esa respuesta venía del entrenamiento del modelo, no de los datos.
+
+Y sonaba exactamente igual de segura que una respuesta fundamentada. Se
+detectó auditando el grafo, no leyendo la respuesta.
+
+Mitigación en el prompt: exigir que cada afirmación se apoye en una línea
+concreta del contexto y declarar el conocimiento previo como fuente no
+válida. El resultado son respuestas más pobres y verificables.
+
+### 6. Un modelo pequeño no obedece instrucciones negativas
+
+Experimento: pedir al esquema que incluyera el año en los nombres de
+competición, para poder contar títulos.
+
+```
+Sin año   ~60 nodos de Competicion
+Con año   212 nodos, casi todos de grado 1
+```
+
+Y no resolvió el problema: faltaban tres de las cinco Champions de Ancelotti,
+así que un `count()` seguiría dando mal. Además introdujo fechas desplazadas
+(FA Cup 2010-11 en vez de 2009-10) y convirtió subcampeonatos en victorias.
+
+Al revertirlo, la instrucción explícita *"NO incluyas años"* fue ignorada: el
+modelo siguió generando "FA Cup 2010-11" y "Balón de Oro en 2011".
+
+La solución no fue insistir en el prompt sino **normalizar después**: una
+expresión regular que quita el año del final del nombre y fusiona los
+duplicados resultantes (`correcciones.py`). Determinista, verificable, y no
+depende de que nadie obedezca.
 
 ---
 
@@ -270,17 +348,27 @@ métrica honesta y documentada que un número inflado.
   con una relación entre ambos.
 - `langchain-experimental` está en proceso de retirada. Alternativa natural:
   `neo4j-graphrag`, mantenido por Neo4j y ya presente como dependencia.
+- **El esquema no distingue competiciones de premios individuales.** El Balón
+  de Oro o el The Best acaban como `Competicion` porque no hay un tipo mejor.
+  Un esquema más maduro tendría `Premio` con su relación `RECIBIO`, y
+  separaría `Competicion` de `Edicion` para poder contar títulos por año.
+- **Contar títulos no es viable desde este corpus.** Requiere una fuente
+  estructurada (Wikidata) en lugar de biografías en prosa extraídas por un
+  modelo pequeño.
+- La resolución de entidades depende de un diccionario de alias mantenido a
+  mano para lo que ninguna métrica puede deducir: `PSG` = `Paris
+  Saint-Germain`, `Fráncfort` = `Frankfurt`, `Champions League` = `Liga de
+  Campeones`. Eso no es un fallo del sistema, es la naturaleza del problema.
 
 ---
 
 ## Pendiente
 
-- [ ] Índice vectorial sobre los chunks (`Neo4jVector`, 1024 dims)
-- [ ] Retriever híbrido: búsqueda semántica + expansión a nodos vecinos vía Cypher
 - [ ] `GraphCypherQAChain` para preguntas agregativas ("cuántos", "quién más")
 - [ ] API con FastAPI
 - [ ] Paso de verificación: segunda pasada del LLM validando cada relación
       contra su fragmento de origen
+- [ ] Migrar de `langchain-experimental` a `neo4j-graphrag`
 
 ---
 
@@ -301,7 +389,11 @@ graphrag-futbol/
     ├── ingest.py               # chunking + extracción + carga
     ├── debug_extraccion.py     # diagnóstico de la extracción
     ├── resolver_entidades2.py  # limpieza y deduplicación
-    └── aprobar.py              # decisiones de fusión, en código
+    ├── aprobar.py              # decisiones de fusión, en código
+    ├── correcciones.py         # alias manuales y relaciones falsas
+    ├── indexar.py              # índice vectorial
+    ├── consultar.py            # preguntas en lenguaje natural
+    └── exportar_web.py         # genera la visualización de docs/
 ```
 
 ---

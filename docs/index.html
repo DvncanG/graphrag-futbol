@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Linajes del banquillo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@300;500;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<style>
+:root{
+  --pizarra:#101E18; --pizarra-2:#16281F; --panel:#0C1813;
+  --tiza:#EDEAE0; --tiza-3:rgba(237,234,224,.42); --linea:rgba(237,234,224,.14);
+  --ambar:#E8A33D; --azul:#6F9BD1; --violeta:#B98BD9; --verde:#8FA89B;
+  --marca:#F5D547;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:var(--pizarra); color:var(--tiza);
+  font-family:'Barlow',system-ui,sans-serif;
+  display:grid; grid-template-columns:320px 1fr; overflow:hidden;
+}
+/* Marcas de campo: el fondo es una pizarra tactica, no un lienzo neutro */
+#lienzo::before{
+  content:''; position:absolute; inset:0; pointer-events:none; z-index:0;
+  background:
+    radial-gradient(circle at 50% 50%, transparent 118px, var(--linea) 118px,
+                    var(--linea) 119px, transparent 119px),
+    linear-gradient(to right, transparent calc(50% - .5px), var(--linea) calc(50% - .5px),
+                    var(--linea) calc(50% + .5px), transparent calc(50% + .5px));
+}
+aside{
+  background:var(--panel); border-right:1px solid var(--linea);
+  padding:26px 22px; overflow-y:auto; z-index:2;
+}
+h1{
+  font-family:'Oswald',sans-serif; font-weight:700; font-size:27px;
+  letter-spacing:.055em; text-transform:uppercase; line-height:1.05;
+}
+h1 span{display:block; color:var(--marca); font-weight:300; font-size:15px;
+  letter-spacing:.24em; margin-top:7px}
+.sub{color:var(--tiza-3); font-size:13.5px; margin:14px 0 26px; line-height:1.55}
+h2{
+  font-family:'Oswald',sans-serif; font-weight:500; font-size:11.5px;
+  letter-spacing:.19em; text-transform:uppercase; color:var(--tiza-3);
+  margin:24px 0 11px; padding-bottom:7px; border-bottom:1px solid var(--linea);
+}
+input,select{
+  width:100%; background:var(--pizarra-2); border:1px solid var(--linea);
+  color:var(--tiza); padding:9px 11px; font-family:'Barlow',sans-serif;
+  font-size:14px; border-radius:3px; margin-bottom:8px;
+}
+input:focus,select:focus{outline:2px solid var(--marca); outline-offset:1px}
+button{
+  width:100%; background:var(--marca); color:#101E18; border:0; padding:10px;
+  font-family:'Oswald',sans-serif; font-weight:500; font-size:13px;
+  letter-spacing:.11em; text-transform:uppercase; border-radius:3px;
+  cursor:pointer;
+}
+button:hover{filter:brightness(1.12)}
+button.fantasma{background:transparent; color:var(--tiza-3);
+  border:1px solid var(--linea); margin-top:7px}
+.filtro{display:flex; align-items:center; gap:9px; padding:5px 0;
+  font-size:13.5px; cursor:pointer}
+.filtro input{width:auto; margin:0; accent-color:var(--marca)}
+.clave{display:flex; align-items:center; gap:9px; padding:4px 0; font-size:13.5px}
+.punto{width:11px; height:11px; border-radius:50%; flex:none}
+#ruta{
+  margin-top:13px; font-size:13.5px; line-height:1.65; color:var(--tiza-3);
+  border-left:2px solid var(--marca); padding-left:12px; display:none;
+}
+#ruta b{color:var(--tiza); font-weight:600}
+#ruta .rel{color:var(--marca); font-family:'Oswald',sans-serif; font-size:11px;
+  letter-spacing:.09em}
+#lienzo{position:relative; z-index:1}
+#red{width:100%; height:100vh; position:relative; z-index:1}
+#cifras{
+  position:absolute; right:22px; bottom:20px; z-index:3; text-align:right;
+  font-family:'Oswald',sans-serif; letter-spacing:.15em; font-size:11px;
+  color:var(--tiza-3); text-transform:uppercase; line-height:1.9;
+}
+#cifras b{color:var(--marca); font-weight:500}
+@media(max-width:860px){
+  body{grid-template-columns:1fr; grid-template-rows:auto 1fr; overflow:auto}
+  #red{height:65vh}
+}
+</style>
+</head>
+<body>
+<aside>
+  <h1>Linajes<br>del banquillo<span>Grafo de conocimiento</span></h1>
+  <p class="sub">Construido con un LLM en local a partir de biografías de
+  Wikipedia. Cada arista se extrajo de un texto y se verificó a mano.</p>
+
+  <h2>Buscar</h2>
+  <input id="buscar" list="entidades" placeholder="Cruyff, Barcelona…" autocomplete="off">
+  <datalist id="entidades"></datalist>
+
+  <h2>Trazar conexión</h2>
+  <input id="desde" list="entidades" placeholder="Desde: Marcelo Bielsa" autocomplete="off">
+  <input id="hasta" list="entidades" placeholder="Hasta: Mikel Arteta" autocomplete="off">
+  <button id="trazar">Trazar</button>
+  <button id="limpiar" class="fantasma">Ver todo</button>
+  <div id="ruta"></div>
+
+  <h2>Relaciones</h2>
+  <div id="filtros"></div>
+
+  <h2>Tipos</h2>
+  <div id="clave"></div>
+</aside>
+
+<div id="lienzo">
+  <div id="red"></div>
+  <div id="cifras"></div>
+</div>
+
+<script>
+const DATOS = {"nodos": [{"id": "A. C. Milan", "tipo": "Club"}, {"id": "A. C. Reggiana 1919", "tipo": "Club"}, {"id": "AC Fiorentina", "tipo": "Club"}, {"id": "AC Trento 1921", "tipo": "Club"}, {"id": "AZ Alkmaar", "tipo": "Club"}, {"id": "Ajax de Ámsterdam", "tipo": "Club"}, {"id": "Al-Sadd S. C.", "tipo": "Club"}, {"id": "Andrea Pirlo", "tipo": "Jugador"}, {"id": "Andriy Shevchenko", "tipo": "Jugador"}, {"id": "Andrés Iniesta", "tipo": "Jugador"}, {"id": "Antiguoko donostiarra", "tipo": "Club"}, {"id": "Arezzo", "tipo": "Club"}, {"id": "Argentino de Rosario", "tipo": "Club"}, {"id": "Arrigo Sacchi", "tipo": "Entrenador"}, {"id": "Arsenal", "tipo": "Club"}, {"id": "Arsène Wenger", "tipo": "Entrenador"}, {"id": "Athletic Bilbao", "tipo": "Club"}, {"id": "Atlético de Madrid", "tipo": "Club"}, {"id": "Avellino", "tipo": "Club"}, {"id": "Barcelona B", "tipo": "Club"}, {"id": "Bayern de Múnich", "tipo": "Club"}, {"id": "Benevento Calcio", "tipo": "Club"}, {"id": "Bobby Robson", "tipo": "Entrenador"}, {"id": "Borussia Dortmund", "tipo": "Club"}, {"id": "Brescia Calcio", "tipo": "Club"}, {"id": "CFR Cluj", "tipo": "Club"}, {"id": "Carlo Ancelotti", "tipo": "Entrenador"}, {"id": "Carlo Mazzone", "tipo": "Entrenador"}, {"id": "Carlos Bilardo", "tipo": "Entrenador"}, {"id": "Catania", "tipo": "Club"}, {"id": "Cesena Calcio", "tipo": "Club"}, {"id": "Chelsea F. C.", "tipo": "Club"}, {"id": "Clarence Seedorf", "tipo": "Jugador"}, {"id": "Claude Puel", "tipo": "Entrenador"}, {"id": "Club Atlético Vélez Sarsfield", "tipo": "Club"}, {"id": "Colonia", "tipo": "Club"}, {"id": "César Luis Menotti", "tipo": "Entrenador"}, {"id": "Diego Simeone", "tipo": "Entrenador"}, {"id": "Edgar Davids", "tipo": "Jugador"}, {"id": "Eintracht Fráncfort", "tipo": "Club"}, {"id": "Erich Rutemöller", "tipo": "Entrenador"}, {"id": "Estrela de Amadora", "tipo": "Club"}, {"id": "Everton", "tipo": "Club"}, {"id": "FC Barcelona", "tipo": "Club"}, {"id": "FK Shajtar Donetsk", "tipo": "Club"}, {"id": "Fatih Terim", "tipo": "Entrenador"}, {"id": "Ferdy Houtman", "tipo": "Entrenador"}, {"id": "Fernando Navarro", "tipo": "Jugador"}, {"id": "Frank Rijkaard", "tipo": "Jugador"}, {"id": "Frank de Boer", "tipo": "Entrenador"}, {"id": "Gabriel Batistuta", "tipo": "Jugador"}, {"id": "Girondins de Bordeaux", "tipo": "Club"}, {"id": "Inter de Milán", "tipo": "Club"}, {"id": "Jari Litmanen", "tipo": "Jugador"}, {"id": "Johan Cruyff", "tipo": "Entrenador"}, {"id": "José Mourinho", "tipo": "Entrenador"}, {"id": "Juan Pablo Sorín", "tipo": "Jugador"}, {"id": "Jürgen Klopp", "tipo": "Entrenador"}, {"id": "Lazio", "tipo": "Club"}, {"id": "Leo Beenhakker", "tipo": "Entrenador"}, {"id": "Lille", "tipo": "Club"}, {"id": "Liverpool", "tipo": "Club"}, {"id": "Louis van Gaal", "tipo": "Entrenador"}, {"id": "Luca Toni", "tipo": "Jugador"}, {"id": "Luis Aragonés", "tipo": "Entrenador"}, {"id": "Luis Enrique", "tipo": "Entrenador"}, {"id": "Luis Fernández", "tipo": "Entrenador"}, {"id": "Mainz 05", "tipo": "Club"}, {"id": "Manchester City", "tipo": "Club"}, {"id": "Manchester United", "tipo": "Club"}, {"id": "Manuel Fernández", "tipo": "Entrenador"}, {"id": "Manuel Rui Costa", "tipo": "Jugador"}, {"id": "Mané Esnal", "tipo": "Entrenador"}, {"id": "Marc Overmars", "tipo": "Jugador"}, {"id": "Marcelo Bielsa", "tipo": "Entrenador"}, {"id": "Mauricio Pochettino", "tipo": "Entrenador"}, {"id": "Mikel Arteta", "tipo": "Entrenador"}, {"id": "Monza", "tipo": "Club"}, {"id": "Napoli", "tipo": "Club"}, {"id": "Newcastle", "tipo": "Club"}, {"id": "Newell's Old Boys", "tipo": "Club"}, {"id": "Newell's Old Boys de Rosario Divisiones inferiores", "tipo": "Club"}, {"id": "Olympique de Lyon", "tipo": "Club"}, {"id": "Olympique de Marsella", "tipo": "Club"}, {"id": "Oporto", "tipo": "Club"}, {"id": "Paolo Maldini", "tipo": "Jugador"}, {"id": "Paris Saint-Germain", "tipo": "Club"}, {"id": "Parma Football Club", "tipo": "Club"}, {"id": "Patrick Kluivert", "tipo": "Jugador"}, {"id": "Pep Guardiola", "tipo": "Entrenador"}, {"id": "Pisa", "tipo": "Club"}, {"id": "Racing Club", "tipo": "Club"}, {"id": "Radomir Antić", "tipo": "Entrenador"}, {"id": "Rangers", "tipo": "Club"}, {"id": "Real Club Deportivo Espanyol", "tipo": "Club"}, {"id": "Real Madrid", "tipo": "Club"}, {"id": "Real Sociedad", "tipo": "Club"}, {"id": "Real Valladolid", "tipo": "Club"}, {"id": "Rijkaard", "tipo": "Entrenador"}, {"id": "Rimini Calcio Football Club", "tipo": "Club"}, {"id": "Rinus Michels", "tipo": "Entrenador"}, {"id": "Rio Ave", "tipo": "Club"}, {"id": "Roberto Baggio", "tipo": "Jugador"}, {"id": "Roberto De Zerbi", "tipo": "Entrenador"}, {"id": "Roma", "tipo": "Club"}, {"id": "Ronald Koeman", "tipo": "Entrenador"}, {"id": "SL Benfica", "tipo": "Club"}, {"id": "Sassuolo", "tipo": "Club"}, {"id": "Selección Argentina", "tipo": "Seleccion"}, {"id": "Selección de Chile", "tipo": "Seleccion"}, {"id": "Selección de fútbol de Brasil", "tipo": "Seleccion"}, {"id": "Selección de fútbol de Italia", "tipo": "Seleccion"}, {"id": "Selección de fútbol de los Estados Unidos", "tipo": "Seleccion"}, {"id": "Selección neerlandesa", "tipo": "Seleccion"}, {"id": "Sergio García", "tipo": "Jugador"}, {"id": "Sevilla FC", "tipo": "Club"}, {"id": "Southampton F. C.", "tipo": "Club"}, {"id": "Sporting de Lisboa", "tipo": "Club"}, {"id": "Sven-Göran Eriksson", "tipo": "Entrenador"}, {"id": "Thomas Doll", "tipo": "Entrenador"}, {"id": "Tottenham Hotspur F. C.", "tipo": "Club"}, {"id": "USC Palermo", "tipo": "Club"}, {"id": "Universidad de Buenos Aires Seleccionado", "tipo": "Seleccion"}, {"id": "Uruguay", "tipo": "Seleccion"}, {"id": "VfB Stuttgart", "tipo": "Club"}, {"id": "Vitória de Setúbal", "tipo": "Club"}, {"id": "Vélez Sarsfield", "tipo": "Club"}, {"id": "Víctor Valdés", "tipo": "Jugador"}, {"id": "Xabi Alonso", "tipo": "Jugador"}, {"id": "Xavi Hernández", "tipo": "Entrenador"}, {"id": "llegó al USC Palermo", "tipo": "Entrenador"}, {"id": "se convirtió en el nuevo entrenador del Sassuolo", "tipo": "Entrenador"}, {"id": "se incorporó al Benevento Calcio", "tipo": "Entrenador"}], "aristas": [{"from": "Jürgen Klopp", "to": "Mainz 05", "tipo": "JUGO_EN"}, {"from": "Rinus Michels", "to": "FC Barcelona", "tipo": "ENTRENO_A"}, {"from": "Pep Guardiola", "to": "FC Barcelona", "tipo": "JUGO_EN"}, {"from": "Pep Guardiola", "to": "Atlético de Madrid", "tipo": "JUGO_EN"}, {"from": "Diego Simeone", "to": "Club Atlético Vélez Sarsfield", "tipo": "JUGO_EN"}, {"from": "Carlos Bilardo", "to": "Sevilla FC", "tipo": "ENTRENO_A"}, {"from": "Luis Aragonés", "to": "Carlos Bilardo", "tipo": "FUE_ASISTENTE_DE"}, {"from": "Luis Aragonés", "to": "Atlético de Madrid", "tipo": "ENTRENO_A"}, {"from": "Radomir Antić", "to": "Atlético de Madrid", "tipo": "ENTRENO_A"}, {"from": "Sven-Göran Eriksson", "to": "Lazio", "tipo": "ENTRENO_A"}, {"from": "Frank de Boer", "to": "Bayern de Múnich", "tipo": "ENTRENO_A"}, {"from": "José Mourinho", "to": "Oporto", "tipo": "ENTRENO_A"}, {"from": "Bobby Robson", "to": "FC Barcelona", "tipo": "ENTRENO_A"}, {"from": "Arrigo Sacchi", "to": "Rinus Michels", "tipo": "FUE_ASISTENTE_DE"}, {"from": "Mauricio Pochettino", "to": "Real Club Deportivo Espanyol", "tipo": "ENTRENO_A"}, {"from": "Mauricio Pochettino", "to": "Real Club Deportivo Espanyol", "tipo": "JUGO_EN"}, {"from": "Mauricio Pochettino", "to": "Mané Esnal", "tipo": "FUE_ASISTENTE_DE"}, {"from": "Mauricio Pochettino", "to": "Selección de fútbol de los Estados Unidos", "tipo": "ENTRENO_A"}, {"from": "Mauricio Pochettino", "to": "Claude Puel", "tipo": "FUE_ASISTENTE_DE"}, {"from": "Jürgen Klopp", "to": "Eintracht Fráncfort", "tipo": "JUGO_EN"}, {"from": "Pep Guardiola", "to": "Real Valladolid", "tipo": "JUGO_EN"}, {"from": "Jürgen Klopp", "to": "Eintracht Fráncfort", "tipo": "ENTRENO_A"}, {"from": "Manuel Rui Costa", "to": "A. C. Milan", "tipo": "JUGO_EN"}, {"from": "Thomas Doll", "to": "Borussia Dortmund", "tipo": "ENTRENO_A"}, {"from": "Paolo Maldini", "to": "A. C. Milan", "tipo": "JUGO_EN"}, {"from": "Carlo Ancelotti", "to": "Arrigo Sacchi", "tipo": "FUE_ASISTENTE_DE"}, {"from": "Xavi Hernández", "to": "FC Barcelona", "tipo": "JUGO_EN"}, {"from": "Carlo Ancelotti", "to": "A. C. Reggiana 1919", "tipo": "ENTRENO_A"}, {"from": "Carlo Ancelotti", "to": "Parma Football Club", "tipo": "JUGO_EN"}, {"from": "Louis van Gaal", "to": "FC Barcelona", "tipo": "ENTRENO_A"}, {"from": "Bobby Robson", "to": "Sporting de Lisboa", "tipo": "ENTRENO_A"}, {"from": "Bobby Robson", "to": "Oporto", "tipo": "ENTRENO_A"}, {"from": "José Mourinho", "to": "FC Barcelona", "tipo": "ENTRENO_A"}, {"from": "Louis van Gaal", "to": "AZ Alkmaar", "tipo": "ENTRENO_A"}, {"from": "Louis van Gaal", "to": "Bayern de Múnich", "tipo": "ENTRENO_A"}, {"from": "Louis van Gaal", "to": "Manchester United", "tipo": "ENTRENO_A"}, {"from": "Louis van Gaal", "to": "Selección neerlandesa", "tipo": "ENTRENO_A"}, {"from": "Roberto De Zerbi", "to": "Tottenham Hotspur F. C.", "tipo": "ENTRENO_A"}, {"from": "Leo Beenhakker", "to": "Ajax de Ámsterdam", "tipo": "ENTRENO_A"}, {"from": "Marcelo Bielsa", "to": "Vélez Sarsfield", "tipo": "ENTRENO_A"}, {"from": "José Mourinho", "to": "Frank de Boer", "tipo": "FUE_ASISTENTE_DE"}, {"from": "José Mourinho", "to": "SL Benfica", "tipo": "ENTRENO_A"}, {"from": "José Mourinho", "to": "Bobby Robson", "tipo": "FUE_ASISTENTE_DE"}, {"from": "Marcelo Bielsa", "to": "Selección Argentina", "tipo": "ENTRENO_A"}, {"from": "José Mourinho", "to": "Rio Ave", "tipo": "ENTRENO_A"}, {"from": "Víctor Valdés", "to": "FC Barcelona", "tipo": "JUGO_EN"}, {"from": "Andrés Iniesta", "to": "FC Barcelona", "tipo": "JUGO_EN"}, {"from": "Fernando Navarro", "to": "FC Barcelona", "tipo": "JUGO_EN"}, {"from": "Sergio García", "to": "FC Barcelona", "tipo": "JUGO_EN"}, {"from": "Ronald Koeman", "to": "Frank de Boer", "tipo": "INFLUYO_EN"}, {"from": "Frank de Boer", "to": "AZ Alkmaar", "tipo": "ENTRENO_A"}, {"from": "Frank de Boer", "to": "Inter de Milán", "tipo": "ENTRENO_A"}, {"from": "Arrigo Sacchi", "to": "Carlo Ancelotti", "tipo": "FUE_ASISTENTE_DE"}, {"from": "Marcelo Bielsa", "to": "Selección de Chile", "tipo": "ENTRENO_A"}, {"from": "Marcelo Bielsa", "to": "Athletic Bilbao", "tipo": "ENTRENO_A"}, {"from": "Marcelo Bielsa", "to": "Olympique de Marsella", "tipo": "ENTRENO_A"}, {"from": "Marcelo Bielsa", "to": "Lille", "tipo": "ENTRENO_A"}, {"from": "Arrigo Sacchi", "to": "Rimini Calcio Football Club", "tipo": "ENTRENO_A"}, {"from": "Marcelo Bielsa", "to": "Uruguay", "tipo": "ENTRENO_A"}, {"from": "Juan Pablo Sorín", "to": "Louis van Gaal", "tipo": "ENTRENADO_POR"}, {"from": "Ferdy Houtman", "to": "Selección neerlandesa", "tipo": "ENTRENO_A"}, {"from": "Carlo Ancelotti", "to": "Chelsea F. C.", "tipo": "ENTRENO_A"}, {"from": "Carlo Ancelotti", "to": "Paris Saint-Germain", "tipo": "ENTRENO_A"}, {"from": "Jürgen Klopp", "to": "Colonia", "tipo": "ENTRENO_A"}, {"from": "Jürgen Klopp", "to": "Erich Rutemöller", "tipo": "ENTRENADO_POR"}, {"from": "Jürgen Klopp", "to": "Mainz 05", "tipo": "ENTRENO_A"}, {"from": "Carlo Ancelotti", "to": "Carlo Ancelotti", "tipo": "INFLUYO_EN"}, {"from": "José Mourinho", "to": "José Mourinho", "tipo": "INFLUYO_EN"}, {"from": "José Mourinho", "to": "Real Madrid", "tipo": "ENTRENO_A"}, {"from": "Louis van Gaal", "to": "Rinus Michels", "tipo": "FUE_ASISTENTE_DE"}, {"from": "Frank Rijkaard", "to": "Louis van Gaal", "tipo": "ENTRENADO_POR"}, {"from": "Mauricio Pochettino", "to": "Newell's Old Boys", "tipo": "JUGO_EN"}, {"from": "Mauricio Pochettino", "to": "Southampton F. C.", "tipo": "ENTRENO_A"}, {"from": "Mauricio Pochettino", "to": "Girondins de Bordeaux", "tipo": "JUGO_EN"}, {"from": "Mikel Arteta", "to": "Luis Fernández", "tipo": "ENTRENADO_POR"}, {"from": "Xabi Alonso", "to": "Real Sociedad", "tipo": "JUGO_EN"}, {"from": "Mikel Arteta", "to": "Barcelona B", "tipo": "JUGO_EN"}, {"from": "Mauricio Pochettino", "to": "Manchester City", "tipo": "ENTRENO_A"}, {"from": "Luis Fernández", "to": "Paris Saint-Germain", "tipo": "ENTRENO_A"}, {"from": "Xabi Alonso", "to": "Mikel Arteta", "tipo": "ENTRENADO_POR"}, {"from": "Mauricio Pochettino", "to": "Tottenham Hotspur F. C.", "tipo": "ENTRENO_A"}, {"from": "Mauricio Pochettino", "to": "Paris Saint-Germain", "tipo": "ENTRENO_A"}, {"from": "Mikel Arteta", "to": "Arsène Wenger", "tipo": "ENTRENADO_POR"}, {"from": "Edgar Davids", "to": "Louis van Gaal", "tipo": "ENTRENADO_POR"}, {"from": "Louis van Gaal", "to": "Ajax de Ámsterdam", "tipo": "ENTRENO_A"}, {"from": "Jari Litmanen", "to": "Louis van Gaal", "tipo": "ENTRENADO_POR"}, {"from": "Marc Overmars", "to": "Louis van Gaal", "tipo": "ENTRENADO_POR"}, {"from": "Mikel Arteta", "to": "FC Barcelona", "tipo": "JUGO_EN"}, {"from": "Patrick Kluivert", "to": "Louis van Gaal", "tipo": "ENTRENADO_POR"}, {"from": "Clarence Seedorf", "to": "Louis van Gaal", "tipo": "ENTRENADO_POR"}, {"from": "Marcelo Bielsa", "to": "Universidad de Buenos Aires Seleccionado", "tipo": "ENTRENO_A"}, {"from": "Marcelo Bielsa", "to": "Newell's Old Boys de Rosario Divisiones inferiores", "tipo": "ENTRENO_A"}, {"from": "Marcelo Bielsa", "to": "Argentino de Rosario", "tipo": "JUGO_EN"}, {"from": "Marcelo Bielsa", "to": "Newell's Old Boys", "tipo": "JUGO_EN"}, {"from": "Marcelo Bielsa", "to": "César Luis Menotti", "tipo": "ENTRENADO_POR"}, {"from": "Xavi Hernández", "to": "Pep Guardiola", "tipo": "ENTRENADO_POR"}, {"from": "Xavi Hernández", "to": "A. C. Milan", "tipo": "JUGO_EN"}, {"from": "Xavi Hernández", "to": "FK Shajtar Donetsk", "tipo": "JUGO_EN"}, {"from": "Xavi Hernández", "to": "Olympique de Lyon", "tipo": "JUGO_EN"}, {"from": "Xavi Hernández", "to": "VfB Stuttgart", "tipo": "JUGO_EN"}, {"from": "Xavi Hernández", "to": "Rijkaard", "tipo": "ENTRENADO_POR"}, {"from": "Pep Guardiola", "to": "Manchester City", "tipo": "ENTRENO_A"}, {"from": "Luis Enrique", "to": "Pep Guardiola", "tipo": "INFLUYO_EN"}, {"from": "Arrigo Sacchi", "to": "A. C. Milan", "tipo": "ENTRENO_A"}, {"from": "Roberto De Zerbi", "to": "A. C. Milan", "tipo": "JUGO_EN"}, {"from": "Xavi Hernández", "to": "FC Barcelona", "tipo": "ENTRENO_A"}, {"from": "Carlo Mazzone", "to": "Brescia Calcio", "tipo": "ENTRENO_A"}, {"from": "Roberto Baggio", "to": "Brescia Calcio", "tipo": "JUGO_EN"}, {"from": "Andrea Pirlo", "to": "Brescia Calcio", "tipo": "JUGO_EN"}, {"from": "Luca Toni", "to": "Brescia Calcio", "tipo": "JUGO_EN"}, {"from": "Xavi Hernández", "to": "Al-Sadd S. C.", "tipo": "ENTRENO_A"}, {"from": "Carlo Ancelotti", "to": "A. C. Milan", "tipo": "ENTRENO_A"}, {"from": "Johan Cruyff", "to": "FC Barcelona", "tipo": "JUGO_EN"}, {"from": "Carlo Ancelotti", "to": "Roma", "tipo": "JUGO_EN"}, {"from": "Rinus Michels", "to": "Selección neerlandesa", "tipo": "ENTRENO_A"}, {"from": "Carlo Ancelotti", "to": "Real Madrid", "tipo": "ENTRENO_A"}, {"from": "Roberto De Zerbi", "to": "Monza", "tipo": "JUGO_EN"}, {"from": "Roberto De Zerbi", "to": "Arezzo", "tipo": "JUGO_EN"}, {"from": "Roberto De Zerbi", "to": "Catania", "tipo": "JUGO_EN"}, {"from": "Roberto De Zerbi", "to": "Napoli", "tipo": "JUGO_EN"}, {"from": "Roberto De Zerbi", "to": "Avellino", "tipo": "JUGO_EN"}, {"from": "Roberto De Zerbi", "to": "CFR Cluj", "tipo": "JUGO_EN"}, {"from": "Roberto De Zerbi", "to": "AC Trento 1921", "tipo": "JUGO_EN"}, {"from": "llegó al USC Palermo", "to": "USC Palermo", "tipo": "ENTRENO_A"}, {"from": "se incorporó al Benevento Calcio", "to": "Benevento Calcio", "tipo": "ENTRENO_A"}, {"from": "se convirtió en el nuevo entrenador del Sassuolo", "to": "Sassuolo", "tipo": "ENTRENO_A"}, {"from": "Mikel Arteta", "to": "Paris Saint-Germain", "tipo": "JUGO_EN"}, {"from": "Fatih Terim", "to": "Carlo Ancelotti", "tipo": "FUE_ASISTENTE_DE"}, {"from": "Mikel Arteta", "to": "Arsenal", "tipo": "JUGO_EN"}, {"from": "Jürgen Klopp", "to": "Liverpool", "tipo": "ENTRENO_A"}, {"from": "Mikel Arteta", "to": "Everton", "tipo": "JUGO_EN"}, {"from": "Mikel Arteta", "to": "Real Sociedad", "tipo": "JUGO_EN"}, {"from": "Arrigo Sacchi", "to": "Cesena Calcio", "tipo": "ENTRENO_A"}, {"from": "Mikel Arteta", "to": "Rangers", "tipo": "JUGO_EN"}, {"from": "Mikel Arteta", "to": "Antiguoko donostiarra", "tipo": "JUGO_EN"}, {"from": "Arrigo Sacchi", "to": "AC Fiorentina", "tipo": "ENTRENO_A"}, {"from": "Mikel Arteta", "to": "Newcastle", "tipo": "JUGO_EN"}, {"from": "Jürgen Klopp", "to": "Borussia Dortmund", "tipo": "ENTRENO_A"}, {"from": "Mikel Arteta", "to": "Arsenal", "tipo": "ENTRENO_A"}, {"from": "Diego Simeone", "to": "Sevilla FC", "tipo": "JUGO_EN"}, {"from": "Diego Simeone", "to": "Racing Club", "tipo": "JUGO_EN"}, {"from": "Diego Simeone", "to": "Atlético de Madrid", "tipo": "JUGO_EN"}, {"from": "Arrigo Sacchi", "to": "Selección de fútbol de Italia", "tipo": "ENTRENO_A"}, {"from": "Arrigo Sacchi", "to": "Atlético de Madrid", "tipo": "ENTRENO_A"}, {"from": "Diego Simeone", "to": "Atlético de Madrid", "tipo": "ENTRENO_A"}, {"from": "Diego Simeone", "to": "Lazio", "tipo": "JUGO_EN"}, {"from": "Diego Simeone", "to": "Pisa", "tipo": "JUGO_EN"}, {"from": "Diego Simeone", "to": "Vélez Sarsfield", "tipo": "JUGO_EN"}, {"from": "Diego Simeone", "to": "Inter de Milán", "tipo": "JUGO_EN"}, {"from": "Carlo Ancelotti", "to": "Selección de fútbol de Brasil", "tipo": "ENTRENO_A"}, {"from": "Andriy Shevchenko", "to": "A. C. Milan", "tipo": "JUGO_EN"}, {"from": "Johan Cruyff", "to": "FC Barcelona", "tipo": "ENTRENO_A"}, {"from": "Johan Cruyff", "to": "Rinus Michels", "tipo": "INFLUYO_EN"}, {"from": "Johan Cruyff", "to": "Ajax de Ámsterdam", "tipo": "ENTRENO_A"}, {"from": "Frank de Boer", "to": "Ajax de Ámsterdam", "tipo": "ENTRENO_A"}, {"from": "Johan Cruyff", "to": "Ajax de Ámsterdam", "tipo": "JUGO_EN"}, {"from": "Rinus Michels", "to": "Ajax de Ámsterdam", "tipo": "ENTRENO_A"}, {"from": "Mauricio Pochettino", "to": "Marcelo Bielsa", "tipo": "ENTRENADO_POR"}, {"from": "Marcelo Bielsa", "to": "Newell's Old Boys", "tipo": "ENTRENO_A"}, {"from": "Gabriel Batistuta", "to": "Marcelo Bielsa", "tipo": "ENTRENADO_POR"}, {"from": "Roberto De Zerbi", "to": "Brescia Calcio", "tipo": "JUGO_EN"}, {"from": "José Mourinho", "to": "Chelsea F. C.", "tipo": "ENTRENO_A"}, {"from": "José Mourinho", "to": "Estrela de Amadora", "tipo": "ENTRENO_A"}, {"from": "José Mourinho", "to": "Vitória de Setúbal", "tipo": "ENTRENO_A"}, {"from": "José Mourinho", "to": "Manuel Fernández", "tipo": "FUE_ASISTENTE_DE"}, {"from": "José Mourinho", "to": "Sporting de Lisboa", "tipo": "ENTRENO_A"}, {"from": "José Mourinho", "to": "Manchester United", "tipo": "ENTRENO_A"}, {"from": "José Mourinho", "to": "Roma", "tipo": "ENTRENO_A"}, {"from": "Arrigo Sacchi", "to": "Parma Football Club", "tipo": "ENTRENO_A"}, {"from": "José Mourinho", "to": "Inter de Milán", "tipo": "ENTRENO_A"}, {"from": "Pep Guardiola", "to": "Johan Cruyff", "tipo": "ENTRENADO_POR"}, {"from": "Pep Guardiola", "to": "José Mourinho", "tipo": "INFLUYO_EN"}, {"from": "Pep Guardiola", "to": "FC Barcelona", "tipo": "ENTRENO_A"}]};
+
+const COLOR = {
+  Entrenador:'#EDEAE0', Jugador:'#8FA89B', Club:'#E8A33D',
+  Seleccion:'#6F9BD1', EstiloJuego:'#B98BD9'
+};
+const ETIQUETA = {
+  ENTRENO_A:'entrenó a', JUGO_EN:'jugó en', ENTRENADO_POR:'dirigido por',
+  INFLUYO_EN:'influyó en', FUE_ASISTENTE_DE:'asistente de'
+};
+const MARCA = '#F5D547', TENUE = 'rgba(237,234,224,.10)';
+
+const grados = {};
+DATOS.aristas.forEach(a => {
+  grados[a.from] = (grados[a.from]||0)+1;
+  grados[a.to]   = (grados[a.to]||0)+1;
+});
+
+const nodos = new vis.DataSet(DATOS.nodos.map(n => ({
+  id:n.id, label:n.id, grupo:n.tipo,
+  value: grados[n.id]||1,
+  color:{background:COLOR[n.tipo]||'#8FA89B', border:COLOR[n.tipo]||'#8FA89B',
+         highlight:{background:MARCA, border:MARCA}},
+  font:{color:'#EDEAE0', size:13, face:'Barlow',
+        strokeWidth:4, strokeColor:'#101E18'}
+})));
+
+const aristas = new vis.DataSet(DATOS.aristas.map((a,i) => ({
+  id:i, from:a.from, to:a.to, tipo:a.tipo,
+  color:{color:'rgba(237,234,224,.22)', highlight:MARCA},
+  width:1, arrows:{to:{enabled:true, scaleFactor:.42}}
+})));
+
+const red = new vis.Network(document.getElementById('red'), {nodes:nodos, edges:aristas}, {
+  nodes:{shape:'dot', scaling:{min:7, max:30}, borderWidth:0},
+  edges:{smooth:{type:'continuous', roundness:.22}},
+  physics:{barnesHut:{gravitationalConstant:-9000, springLength:135,
+                      springConstant:.03, damping:.42}, stabilization:{iterations:320}},
+  interaction:{hover:true, tooltipDelay:120, navigationButtons:false}
+});
+
+document.getElementById('cifras').innerHTML =
+  `<b>${DATOS.nodos.length}</b> entidades<br><b>${DATOS.aristas.length}</b> relaciones`;
+
+// Listas y leyenda
+const lista = document.getElementById('entidades');
+DATOS.nodos.map(n=>n.id).sort().forEach(id => {
+  const o = document.createElement('option'); o.value = id; lista.appendChild(o);
+});
+document.getElementById('clave').innerHTML = Object.entries(COLOR)
+  .map(([t,c]) => `<div class="clave"><span class="punto" style="background:${c}"></span>${t}</div>`)
+  .join('');
+document.getElementById('filtros').innerHTML = Object.entries(ETIQUETA)
+  .map(([t,e]) => `<label class="filtro"><input type="checkbox" data-tipo="${t}" checked>${e}</label>`)
+  .join('');
+
+document.querySelectorAll('#filtros input').forEach(c => c.addEventListener('change', () => {
+  const activos = new Set([...document.querySelectorAll('#filtros input:checked')]
+    .map(i => i.dataset.tipo));
+  aristas.update(aristas.get().map(a => ({
+    id:a.id, hidden: !activos.has(a.tipo)
+  })));
+}));
+
+// Buscar: centra y selecciona
+document.getElementById('buscar').addEventListener('change', e => {
+  const id = e.target.value;
+  if (!nodos.get(id)) return;
+  red.focus(id, {scale:1.4, animation:{duration:520}});
+  red.selectNodes([id]);
+});
+
+// Camino mas corto: BFS sobre la lista de adyacencia, en el navegador
+const vecinos = {};
+DATOS.aristas.forEach(a => {
+  (vecinos[a.from] = vecinos[a.from]||[]).push({n:a.to, tipo:a.tipo, dir:1});
+  (vecinos[a.to]   = vecinos[a.to]||[]).push({n:a.from, tipo:a.tipo, dir:-1});
+});
+
+function buscarCamino(a, b){
+  if (a === b || !vecinos[a] || !vecinos[b]) return null;
+  const previo = {[a]:null}, cola = [a];
+  while (cola.length){
+    const act = cola.shift();
+    if (act === b) break;
+    for (const v of (vecinos[act]||[])){
+      if (previo[v.n] !== undefined) continue;
+      previo[v.n] = {de:act, tipo:v.tipo, dir:v.dir};
+      cola.push(v.n);
+    }
+  }
+  if (previo[b] === undefined) return null;
+  const pasos = [];
+  let act = b;
+  while (previo[act]){
+    pasos.unshift({de:previo[act].de, a:act, tipo:previo[act].tipo, dir:previo[act].dir});
+    act = previo[act].de;
+  }
+  return pasos;
+}
+
+function resaltar(pasos){
+  const enRuta = new Set(), aristasRuta = new Set();
+  pasos.forEach(p => { enRuta.add(p.de); enRuta.add(p.a); });
+  DATOS.aristas.forEach((a,i) => {
+    if (pasos.some(p => (p.de===a.from && p.a===a.to) || (p.de===a.to && p.a===a.from)))
+      aristasRuta.add(i);
+  });
+  nodos.update(DATOS.nodos.map(n => ({
+    id:n.id,
+    color: enRuta.has(n.id)
+      ? {background:COLOR[n.tipo]||'#8FA89B', border:MARCA}
+      : {background:TENUE, border:TENUE},
+    borderWidth: enRuta.has(n.id) ? 3 : 0,
+    font:{color: enRuta.has(n.id) ? '#EDEAE0' : 'rgba(237,234,224,.18)',
+          size:13, face:'Barlow', strokeWidth:4, strokeColor:'#101E18'}
+  })));
+  aristas.update(aristas.get().map(a => ({
+    id:a.id,
+    color:{color: aristasRuta.has(a.id) ? MARCA : 'rgba(237,234,224,.05)'},
+    width: aristasRuta.has(a.id) ? 3 : 1
+  })));
+  red.fit({nodes:[...enRuta], animation:{duration:620}});
+}
+
+function verTodo(){
+  nodos.update(DATOS.nodos.map(n => ({
+    id:n.id,
+    color:{background:COLOR[n.tipo]||'#8FA89B', border:COLOR[n.tipo]||'#8FA89B'},
+    borderWidth:0,
+    font:{color:'#EDEAE0', size:13, face:'Barlow', strokeWidth:4, strokeColor:'#101E18'}
+  })));
+  aristas.update(aristas.get().map(a => ({
+    id:a.id, color:{color:'rgba(237,234,224,.22)'}, width:1
+  })));
+  document.getElementById('ruta').style.display = 'none';
+  red.fit({animation:{duration:520}});
+}
+
+document.getElementById('trazar').addEventListener('click', () => {
+  const a = document.getElementById('desde').value;
+  const b = document.getElementById('hasta').value;
+  const caja = document.getElementById('ruta');
+  caja.style.display = 'block';
+
+  if (!nodos.get(a) || !nodos.get(b)){
+    caja.innerHTML = 'Escribe dos entidades que existan en el grafo. El desplegable las sugiere.';
+    return;
+  }
+  const pasos = buscarCamino(a, b);
+  if (!pasos){
+    caja.innerHTML = `No hay ningún camino entre <b>${a}</b> y <b>${b}</b> con las relaciones del grafo.`;
+    return;
+  }
+  caja.innerHTML = `<b>${pasos.length}</b> ${pasos.length===1?'salto':'saltos'}<br><br>` +
+    pasos.map(p => {
+      const [x,y] = p.dir===1 ? [p.de,p.a] : [p.a,p.de];
+      return `<b>${x}</b> <span class="rel">${(ETIQUETA[p.tipo]||p.tipo).toUpperCase()}</span> <b>${y}</b>`;
+    }).join('<br>');
+  resaltar(pasos);
+});
+
+document.getElementById('limpiar').addEventListener('click', verTodo);
+
+red.on('click', p => {
+  if (!p.nodes.length) return;
+  document.getElementById('buscar').value = p.nodes[0];
+});
+</script>
+</body>
+</html>
