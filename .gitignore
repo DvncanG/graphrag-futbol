@@ -1,0 +1,8 @@
+.env
+.venv/
+data/corpus/
+data/.progreso.json
+__pycache__/
+APUNTES.md
+.vscode/
+.idea/

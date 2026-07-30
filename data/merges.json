@@ -1,0 +1,257 @@
+[
+  {
+    "detector": "apellido",
+    "tipo": "Entrenador",
+    "canonico": "Johan Cruyff",
+    "variantes": [
+      "Johan Cruyff",
+      "Cruyff"
+    ],
+    "aprobado": true,
+    "nota": "revisar: apellido suelto"
+  },
+  {
+    "detector": "apellido",
+    "tipo": "Entrenador",
+    "canonico": "José Mourinho",
+    "variantes": [
+      "José Mourinho",
+      "Mourinho"
+    ],
+    "aprobado": false,
+    "nota": "revisar: apellido suelto"
+  },
+  {
+    "detector": "errata",
+    "tipo": "Competicion",
+    "canonico": "Campeonato Europeo de Fútbol (UEFA Euro) 2012",
+    "variantes": [
+      "Campeonato Europeo de Fútbol (UEFA Euro) 2012",
+      "Campeonato Europeo de Fútbol (UEFA Euro) 2008"
+    ],
+    "aprobado": false,
+    "nota": "revisar: difieren en 1-2 letras"
+  },
+  {
+    "detector": "errata",
+    "tipo": "Competicion",
+    "canonico": "Copa América 1993",
+    "variantes": [
+      "Copa América 1993",
+      "Copa América 1991"
+    ],
+    "aprobado": false,
+    "nota": "revisar: difieren en 1-2 letras"
+  },
+  {
+    "detector": "errata",
+    "tipo": "Competicion",
+    "canonico": "Copa Confederaciones 2013",
+    "variantes": [
+      "Copa Confederaciones 2013",
+      "Copa Confederaciones 2009"
+    ],
+    "aprobado": false,
+    "nota": "revisar: difieren en 1-2 letras"
+  },
+  {
+    "detector": "errata",
+    "tipo": "Competicion",
+    "canonico": "Liga de las temporadas 1998-1999",
+    "variantes": [
+      "Liga de las temporadas 1998-1999",
+      "Liga de las temporadas 1997-1998"
+    ],
+    "aprobado": false,
+    "nota": "revisar: difieren en 1-2 letras"
+  },
+  {
+    "detector": "errata",
+    "tipo": "Competicion",
+    "canonico": "Recopa de Europa",
+    "variantes": [
+      "Recopa de Europa",
+      "Copa de Europa"
+    ],
+    "aprobado": false,
+    "nota": "revisar: difieren en 1-2 letras"
+  },
+  {
+    "detector": "errata",
+    "tipo": "Competicion",
+    "canonico": "UEFA Champions League 2019",
+    "variantes": [
+      "UEFA Champions League 2019",
+      "UEFA Champions League 2018"
+    ],
+    "aprobado": false,
+    "nota": "revisar: difieren en 1-2 letras"
+  },
+  {
+    "detector": "errata",
+    "tipo": "Jugador",
+    "canonico": "Ronaldo",
+    "variantes": [
+      "Ronaldo",
+      "Rivaldo"
+    ],
+    "aprobado": false,
+    "nota": "revisar: difieren en 1-2 letras"
+  },
+  {
+    "detector": "prefijo",
+    "tipo": "Club",
+    "canonico": "Ajax de Ámsterdam",
+    "variantes": [
+      "Ajax de Ámsterdam",
+      "Ajax"
+    ],
+    "aprobado": true,
+    "nota": "revisar: forma corta contenida"
+  },
+  {
+    "detector": "prefijo",
+    "tipo": "Club",
+    "canonico": "Atlético de Madrid",
+    "variantes": [
+      "Atlético de Madrid",
+      "Atlético"
+    ],
+    "aprobado": true,
+    "nota": "revisar: forma corta contenida"
+  },
+  {
+    "detector": "prefijo",
+    "tipo": "Club",
+    "canonico": "Eintracht Fráncfort II",
+    "variantes": [
+      "Eintracht Fráncfort II",
+      "Eintracht Fráncfort"
+    ],
+    "aprobado": false,
+    "nota": "revisar: forma corta contenida"
+  },
+  {
+    "detector": "prefijo",
+    "tipo": "Competicion",
+    "canonico": "Copa Intercontinental de la FIFA 2024",
+    "variantes": [
+      "Copa Intercontinental de la FIFA 2024",
+      "Copa Intercontinental"
+    ],
+    "aprobado": false,
+    "nota": "revisar: forma corta contenida"
+  },
+  {
+    "detector": "prefijo",
+    "tipo": "Competicion",
+    "canonico": "Copa de Francia 2021",
+    "variantes": [
+      "Copa de Francia 2021",
+      "Copa de Francia"
+    ],
+    "aprobado": false,
+    "nota": "revisar: forma corta contenida"
+  },
+  {
+    "detector": "prefijo",
+    "tipo": "Competicion",
+    "canonico": "Copa de la UEFA 2005-06",
+    "variantes": [
+      "Copa de la UEFA 2005-06",
+      "Copa de la UEFA"
+    ],
+    "aprobado": false,
+    "nota": "revisar: forma corta contenida"
+  },
+  {
+    "detector": "prefijo",
+    "tipo": "Competicion",
+    "canonico": "Liga Europa Conferencia",
+    "variantes": [
+      "Liga Europa Conferencia",
+      "Liga Europa"
+    ],
+    "aprobado": false,
+    "nota": "revisar: forma corta contenida"
+  },
+  {
+    "detector": "prefijo",
+    "tipo": "Competicion",
+    "canonico": "Liga española de fútbol",
+    "variantes": [
+      "Liga española de fútbol",
+      "Liga española"
+    ],
+    "aprobado": true,
+    "nota": "revisar: forma corta contenida"
+  },
+  {
+    "detector": "prefijo",
+    "tipo": "Competicion",
+    "canonico": "Premier League 2019-20",
+    "variantes": [
+      "Premier League 2019-20",
+      "Premier League"
+    ],
+    "aprobado": false,
+    "nota": "revisar: forma corta contenida"
+  },
+  {
+    "detector": "prefijo",
+    "tipo": "Competicion",
+    "canonico": "Supercopa de Europa 2019-20",
+    "variantes": [
+      "Supercopa de Europa 2019-20",
+      "Supercopa de Europa"
+    ],
+    "aprobado": false,
+    "nota": "revisar: forma corta contenida"
+  },
+  {
+    "detector": "prefijo",
+    "tipo": "Competicion",
+    "canonico": "Supercopa de Francia 2021",
+    "variantes": [
+      "Supercopa de Francia 2021",
+      "Supercopa de Francia"
+    ],
+    "aprobado": false,
+    "nota": "revisar: forma corta contenida"
+  },
+  {
+    "detector": "manual",
+    "tipo": "Entrenador",
+    "canonico": "Marcelo Bielsa",
+    "variantes": [
+      "Marcelo Bielsa",
+      "Marcelo Alberto Bielsa Caldera"
+    ],
+    "aprobado": true,
+    "nota": "nombre completo con segundo apellido"
+  },
+  {
+    "detector": "manual",
+    "tipo": "Entrenador",
+    "canonico": "José Mourinho",
+    "variantes": [
+      "José Mourinho",
+      "José Mário dos Santos Mourinho Félix",
+      "Mourinho"
+    ],
+    "aprobado": true,
+    "nota": "nombre portugues completo: acaba en Felix, no en Mourinho"
+  },
+  {
+    "detector": "manual",
+    "tipo": "Entrenador",
+    "canonico": "Pep Guardiola",
+    "variantes": [
+      "Pep Guardiola",
+      "Josep Guardiola",
+      "Guardiola"
+    ],
+    "aprobado": true,
+    "nota": "Pep es hipocoristico de Josep: cero parecido de cadena"
+  }
+]

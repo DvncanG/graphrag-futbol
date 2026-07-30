@@ -1,0 +1,32 @@
+services:
+  neo4j:
+    image: neo4j:5-community
+    container_name: graphrag-neo4j
+    ports:
+      - "7474:7474"   # Browser
+      - "7687:7687"   # Bolt
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-graphrag2026}
+      NEO4J_PLUGINS: '["apoc"]'
+      # APOC necesita permisos explicitos para procedimientos no sandboxeados
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*"
+      NEO4J_dbms_security_procedures_allowlist: "apoc.*"
+      # Memoria ajustada para portatil/desktop; subir si el corpus crece
+      NEO4J_server_memory_heap_initial__size: 1G
+      NEO4J_server_memory_heap_max__size: 4G
+      NEO4J_server_memory_pagecache_size: 2G
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - ./data:/import   # para cargas via LOAD CSV si hicieran falta
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  neo4j_data:
+  neo4j_logs:

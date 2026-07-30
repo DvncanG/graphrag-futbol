@@ -1,0 +1,15 @@
+# Sin pinear a proposito: instala, comprueba que el smoke test pasa,
+# y entonces congela con `pip freeze > requirements.lock.txt`
+langchain
+langchain-core
+langchain-neo4j
+langchain-ollama
+langchain-experimental   # LLMGraphTransformer vive aqui
+langchain-text-splitters
+neo4j
+pydantic
+python-dotenv
+httpx
+wikipedia-api            # para descargar el corpus del paso 2
+fastapi
+uvicorn[standard]
