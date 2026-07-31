@@ -74,6 +74,7 @@ ARTICLES = [
     "Jürgen Klopp",
     "Xavi Hernández",  # "Xavi" a secas es una pagina de desambiguacion
     "Roberto De Zerbi",
+    "Zinedine Zidane",
 ]
 
 

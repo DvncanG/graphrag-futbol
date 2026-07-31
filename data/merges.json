@@ -1,36 +1,36 @@
 [
   {
-    "detector": "apellido",
-    "tipo": "Entrenador",
-    "canonico": "Frank Rijkaard",
+    "detector": "normalizacion",
+    "tipo": "Club",
+    "canonico": "Juventus F. C.",
     "variantes": [
-      "Frank Rijkaard",
-      "Rijkaard"
+      "Juventus F. C.",
+      "Juventus"
     ],
-    "aprobado": false,
-    "nota": "revisar: apellido suelto"
+    "aprobado": true,
+    "nota": "alta confianza: mismo nombre tras normalize"
   },
   {
-    "detector": "prefijo",
+    "detector": "normalizacion",
     "tipo": "Club",
-    "canonico": "AZ Alkmaar neerlandés",
+    "canonico": "Real Madrid C. F.",
     "variantes": [
-      "AZ Alkmaar neerlandés",
-      "AZ Alkmaar"
+      "Real Madrid C. F.",
+      "Real Madrid"
     ],
-    "aprobado": false,
-    "nota": "revisar: forma corta contenida"
+    "aprobado": true,
+    "nota": "alta confianza: mismo nombre tras normalize"
   },
   {
-    "detector": "prefijo",
-    "tipo": "Club",
-    "canonico": "Antiguoko donostiarra",
+    "detector": "normalizacion",
+    "tipo": "Competicion",
+    "canonico": "Scudetto",
     "variantes": [
-      "Antiguoko donostiarra",
-      "Antiguoko"
+      "Scudetto",
+      "scudetto"
     ],
-    "aprobado": false,
-    "nota": "revisar: forma corta contenida"
+    "aprobado": true,
+    "nota": "alta confianza: mismo nombre tras normalize"
   },
   {
     "detector": "prefijo",
@@ -39,6 +39,17 @@
     "variantes": [
       "Copa Intercontinental de la FIFA",
       "Copa Intercontinental"
+    ],
+    "aprobado": false,
+    "nota": "revisar: forma corta contenida"
+  },
+  {
+    "detector": "prefijo",
+    "tipo": "Competicion",
+    "canonico": "Liga de Campeones de la UEFA",
+    "variantes": [
+      "Liga de Campeones de la UEFA",
+      "Liga de Campeones"
     ],
     "aprobado": false,
     "nota": "revisar: forma corta contenida"
@@ -55,6 +66,28 @@
     "nota": "revisar: forma corta contenida"
   },
   {
+    "detector": "prefijo",
+    "tipo": "Seleccion",
+    "canonico": "Fue nombrado nuevo seleccionador",
+    "variantes": [
+      "Fue nombrado nuevo seleccionador",
+      "Fue"
+    ],
+    "aprobado": false,
+    "nota": "revisar: forma corta contenida"
+  },
+  {
+    "detector": "subconjunto",
+    "tipo": "Entrenador",
+    "canonico": "Zinedine Yazid Zidane",
+    "variantes": [
+      "Zinedine Yazid Zidane",
+      "Zinedine Zidane"
+    ],
+    "aprobado": false,
+    "nota": "revisar: mismo nombre y apellido, distinto segundo nombre"
+  },
+  {
     "detector": "manual",
     "tipo": "Entrenador",
     "canonico": "Marcelo Bielsa",
@@ -62,7 +95,7 @@
       "Marcelo Bielsa",
       "Marcelo Alberto Bielsa Caldera"
     ],
-    "aprobado": true,
+    "aprobado": false,
     "nota": "nombre completo con segundo apellido"
   },
   {
@@ -74,7 +107,7 @@
       "José Mário dos Santos Mourinho Félix",
       "Mourinho"
     ],
-    "aprobado": true,
+    "aprobado": false,
     "nota": "nombre portugues completo: acaba en Felix, no en Mourinho"
   },
   {
@@ -86,7 +119,7 @@
       "Josep Guardiola",
       "Guardiola"
     ],
-    "aprobado": true,
+    "aprobado": false,
     "nota": "Pep es hipocoristico de Josep: cero parecido de cadena"
   }
 ]

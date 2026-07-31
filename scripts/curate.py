@@ -173,7 +173,7 @@ ALIASES = {
     # existen Norbert Klopp (padre) y Carmelo Simeone (padre). En ESTE
     # corpus, el apellido suelto se refiere siempre al hijo.
     "Jürgen Klopp": ["Jürgen Norbert Klopp", "Norbert Klopp", "Klopp"],
-    "Diego Simeone": ["Diego Pablo Simeone", "Simeone"],
+    "Diego Simeone": ["Diego Pablo Simeone", "Simeone","Cholo Simeone"],
     "Mauricio Pochettino": ["Mauricio Roberto Pochettino", "Pochettino"],
     # Traducciones de topónimos: ninguna metrica de cadenas las relaciona.
     "Eintracht Fráncfort": ["Eintracht Frankfurt", "Eintracht Francfort"],
@@ -188,6 +188,7 @@ ALIASES = {
     "Oporto": ["Porto", "FC Porto"],
     "Carlo Ancelotti": ["Ancelotti"],
     "Arrigo Sacchi": ["Sacchi"],
+    "Zinedine Zidane": ["Zidane", "Zinedine Yazid Zidane", "Zinédine Zidane"],
 }
 
 # Nodos que no son entidades y que las reglas automaticas no cazan.

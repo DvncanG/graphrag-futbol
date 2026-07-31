@@ -46,7 +46,7 @@ RETURN a.id AS origen,  [l IN labels(a) WHERE l <> '__Entity__'][0] AS tipo_orig
        type(r) AS relacion
 """
 
-PROMPT = r"""<!DOCTYPE html>
+HTML_TEMPLATE = r"""<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="utf-8">
@@ -110,6 +110,9 @@ button{
 button:hover{filter:brightness(1.12)}
 button.fantasma{background:transparent; color:var(--tiza-3);
   border:1px solid var(--linea); margin-top:7px}
+.rango{display:block; font-size:13px; color:var(--tiza-3); margin-bottom:12px}
+.rango b{color:var(--marca); font-family:'Oswald',sans-serif}
+.rango input[type=range]{width:100%; margin-top:6px; accent-color:var(--marca)}
 .filtro{display:flex; align-items:center; gap:9px; padding:5px 0;
   font-size:13.5px; cursor:pointer}
 .filtro input{width:auto; margin:0; accent-color:var(--marca)}
@@ -153,6 +156,16 @@ button.fantasma{background:transparent; color:var(--tiza-3);
   <button id="clean" class="fantasma">Ver todo</button>
   <div id="ruta"></div>
 
+  <h2>Densidad</h2>
+  <label class="rango">Conexiones mínimas: <b id="minVal">1</b>
+    <input type="range" id="minGrado" min="1" max="6" value="1"></label>
+  <label class="rango">Etiquetas
+    <select id="etiquetas">
+      <option value="clave">Solo nodos destacados</option>
+      <option value="todas">Todas</option>
+      <option value="ninguna">Ninguna</option>
+    </select></label>
+
   <h2>Relaciones</h2>
   <div id="filtros"></div>
 
@@ -184,13 +197,18 @@ DATOS.aristas.forEach(a => {
   grados[a.to]   = (grados[a.to]||0)+1;
 });
 
+// Umbral por encima del cual un nodo se considera destacado y lleva
+// etiqueta visible. Con 130 nodos, mostrarlas todas hace ilegible el grafo.
+const DESTACADO = 3;
+const etiqueta = n => (grados[n.id]||0) >= DESTACADO ? n.id : '';
+
 const nodos = new vis.DataSet(DATOS.nodos.map(n => ({
-  id:n.id, label:n.id, grupo:n.tipo,
+  id:n.id, label:etiqueta(n), titulo:n.id, grupo:n.tipo,
   value: grados[n.id]||1,
   color:{background:COLOR[n.tipo]||'#8FA89B', border:COLOR[n.tipo]||'#8FA89B',
          highlight:{background:MARCA, border:MARCA}},
   font:{color:'#EDEAE0', size:13, face:'Barlow',
-        strokeWidth:4, strokeColor:'#101E18'}
+        strokeWidth:5, strokeColor:'#101E18'}
 })));
 
 const aristas = new vis.DataSet(DATOS.aristas.map((a,i) => ({
@@ -202,8 +220,9 @@ const aristas = new vis.DataSet(DATOS.aristas.map((a,i) => ({
 const red = new vis.Network(document.getElementById('red'), {nodes:nodos, edges:aristas}, {
   nodes:{shape:'dot', scaling:{min:7, max:30}, borderWidth:0},
   edges:{smooth:{type:'continuous', roundness:.22}},
-  physics:{barnesHut:{gravitationalConstant:-9000, springLength:135,
-                      springConstant:.03, damping:.42}, stabilization:{iterations:320}},
+  physics:{barnesHut:{gravitationalConstant:-30000, centralGravity:.12,
+                      springLength:250, springConstant:.02, damping:.55,
+                      avoidOverlap:.55}, stabilization:{iterations:500}},
   interaction:{hover:true, tooltipDelay:120, navigationButtons:false}
 });
 
@@ -229,6 +248,27 @@ document.querySelectorAll('#filtros input').forEach(c => c.addEventListener('cha
     id:a.id, hidden: !activos.has(a.tipo)
   })));
 }));
+
+// Densidad: oculta los nodos con pocas conexiones. Los nodos de grado 1
+// son la mayoria y aportan poco al mapa de linajes.
+function aplicarDensidad(){
+  const min = +document.getElementById('minGrado').value;
+  document.getElementById('minVal').textContent = min;
+  nodos.update(DATOS.nodos.map(n => ({
+    id:n.id, hidden:(grados[n.id]||0) < min
+  })));
+}
+document.getElementById('minGrado').addEventListener('input', aplicarDensidad);
+
+document.getElementById('etiquetas').addEventListener('change', e => {
+  const modo = e.target.value;
+  nodos.update(DATOS.nodos.map(n => ({
+    id:n.id,
+    label: modo === 'todas' ? n.id
+         : modo === 'ninguna' ? ''
+         : etiqueta(n)
+  })));
+});
 
 // Buscar: centra y selecciona
 document.getElementById('buscar').addEventListener('change', e => {
@@ -364,7 +404,7 @@ def main() -> int:
 
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(
-        PROMPT.replace("__DATOS__", json.dumps(datos, ensure_ascii=False)),
+        HTML_TEMPLATE.replace("__DATOS__", json.dumps(datos, ensure_ascii=False)),
         encoding="utf-8",
     )
 
