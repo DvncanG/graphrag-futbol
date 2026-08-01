@@ -235,6 +235,26 @@ DELETE_RELS = [
     ("José Mourinho", "ENTRENO_A", "FC Barcelona", "fue ayudante de Van Gaal"),
     ("José Mourinho", "ENTRENO_A", "Paris Saint-Germain", "nunca dirigio al PSG"),
     ("Mikel Arteta", "JUGO_EN", "Newcastle", "nunca jugo en el Newcastle"),
+    # --- INFLUYO_EN: la relacion menos fiable del esquema -----------------
+    # Auditadas las 15 extraidas contra la realidad: solo 3 correctas (~20%).
+    # Patron del error: cuando un articulo nombra a varios entrenadores
+    # juntos -comparaciones, listas de rivales, "entre los mejores junto
+    # a..."- el modelo convierte esa coincidencia en influencia. Es la unica
+    # relacion interpretativa del esquema; las factuales rondan el 96%.
+    ("Diego Simeone", "INFLUYO_EN", "Diego Simeone", "autorreferencia"),
+    ("Carlo Ancelotti", "INFLUYO_EN", "Pep Guardiola", "coincidencia en el texto"),
+    ("Carlo Ancelotti", "INFLUYO_EN", "Johan Cruyff", "coincidencia en el texto"),
+    ("Carlo Ancelotti", "INFLUYO_EN", "Giovanni Trapattoni", "coincidencia"),
+    ("Carlo Ancelotti", "INFLUYO_EN", "Frank Rijkaard", "coincidencia en el texto"),
+    ("Carlo Ancelotti", "INFLUYO_EN", "Zinedine Zidane", "fue su ayudante"),
+    ("José Mourinho", "INFLUYO_EN", "Pep Guardiola", "rivales, no maestro-discipulo"),
+    ("Luis Enrique", "INFLUYO_EN", "Pep Guardiola", "direccion invertida y sin base"),
+    ("Manuel Fernández", "INFLUYO_EN", "José Mourinho", "sin base en el texto"),
+    ("Mauricio Pochettino", "INFLUYO_EN", "José Antonio Camacho", "sin base"),
+    ("Mauricio Pochettino", "INFLUYO_EN", "Antonio Conte", "rivales de liga"),
+    ("Mauricio Pochettino", "INFLUYO_EN", "Nuno Espírito Santo", "rivales de liga"),
+    # Direccion invertida: Michels fue el maestro de Cruyff, no al reves.
+    ("Johan Cruyff", "INFLUYO_EN", "Rinus Michels", "direccion invertida"),
 ]
 
 
