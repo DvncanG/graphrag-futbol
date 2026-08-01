@@ -147,7 +147,7 @@ def fetch_career(cliente: httpx.Client, qid: str) -> list[dict]:
 FILE_HEADER = '''"""
 Datos de referencia: carreras reales, descargadas de Wikidata.
 
-GENERADO AUTOMATICAMENTE por scripts/descargar_verdad.py. No editar a mano:
+GENERADO AUTOMATICAMENTE por scripts/evaluate.py --download. No editar a mano:
 los cambios se pierden en la siguiente descarga.
 
 Fuente: Wikidata, propiedades P54 (miembro de equipo deportivo) y P6087
@@ -215,7 +215,7 @@ def download(revisar: bool) -> int:
         print("\nNo se ha descargado nada. Revisa la conexión.")
         return 1
     if revisar:
-        print("\nModo revisión: no se ha escrito verdad.py")
+        print("\nModo revisión: no se ha escrito ground_truth.py")
         return 0
     write_ground_truth(datos)
     print(f"\n{len(datos)} personas -> {GROUND_TRUTH_FILE}")
@@ -422,10 +422,10 @@ def main() -> int:
     parser.add_argument(
         "--review",
         action="store_true",
-        help="ver que trae Wikidata sin write_ground_truth nada",
+        help="ver que trae Wikidata sin escribir nada",
     )
     parser.add_argument(
-        "--download", action="store_true", help="generar verdad.py desde Wikidata"
+        "--download", action="store_true", help="generar ground_truth.py desde Wikidata"
     )
     parser.add_argument("--delete-extra", action="store_true")
     parser.add_argument("--add-missing", action="store_true")

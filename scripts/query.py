@@ -181,7 +181,7 @@ class Retriever:
     """Se construye una vez y se reutiliza en todas las preguntas.
 
     Crear el objeto Neo4jVector abre conexion y valida el indice; hacerlo en
-    cada pregunta anadiria latencia inutil al modo repl.
+    cada pregunta anadiria latencia inutil al modo interactivo.
     """
 
     def __init__(self) -> None:
@@ -291,13 +291,13 @@ class Retriever:
 
         detectadas = []
         if con_grafo:
-            detectadas = self.detectar(pregunta)
-            vecinos = self.vecindario(detectadas)
+            detectadas = self.detect_entities(pregunta)
+            vecinos = self.neighbourhood(detectadas)
             if vecinos:
                 partes.insert(0, vecinos)
             # El camino va PRIMERO: es lo mas especifico que tenemos y un
             # modelo pequeno atiende mejor al principio del contexto.
-            ruta = self.caminos(detectadas)
+            ruta = self.shortest_paths(detectadas)
             if ruta:
                 partes.insert(0, ruta)
 
@@ -317,7 +317,7 @@ class Retriever:
 
 def render(buscador: Retriever, pregunta: str, con_grafo: bool, titulo: str) -> None:
     print(f"\n{'=' * 70}\n{titulo}\n{'=' * 70}")
-    r = buscador.consultar(pregunta, con_grafo)
+    r = buscador.answer(pregunta, con_grafo)
     print(f"Chunks: {', '.join(str(f) for f in r['fuentes'])}")
     if con_grafo:
         if r["detectadas"]:
@@ -362,7 +362,7 @@ def repl(buscador: Retriever) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("question", nargs="?", help="si se omite, modo repl")
+    parser.add_argument("question", nargs="?", help="si se omite, modo interactivo")
     parser.add_argument(
         "--mode", choices=["plano", "grafo", "comparar"], default="comparar"
     )
@@ -384,7 +384,7 @@ def main() -> int:
         buscador = Retriever()
     except Exception as exc:
         print(f"Error: {str(exc)[:200]}")
-        print("Comprueba que Neo4j esta arriba y que ejecutaste build_index.py")
+        print("Comprueba que Neo4j esta arriba y que ejecutaste query.py --index")
         return 1
 
     if args.question:

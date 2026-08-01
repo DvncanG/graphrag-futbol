@@ -324,28 +324,68 @@ depende de que nadie obedezca.
 
 ## Calidad de los datos
 
-Medición manual sobre ~50 relaciones auditadas:
+Medida con `evaluate.py`, que compara el grafo contra **Wikidata** (propiedades
+`P54` y `P6087`). La referencia es una fuente estructurada e independiente, no
+el criterio de quien escribió el proyecto: sin eso, cualquier porcentaje sería
+autocomplaciente.
 
-| Métrica | Valor |
-|---|---|
-| Nodos tras extracción | 375 |
-| Nodos tras limpieza y deduplicación | 275 |
-| Precisión estimada de relaciones | **~88%** |
+| Métrica | Valor | Qué significa |
+|---|---|---|
+| **Precisión** | 53/55 = **96%** | De lo que el modelo extrajo, cuánto es cierto |
+| **Cobertura** | 53/88 = **60%** | De lo que es cierto, cuánto llegó a extraer |
 
-Tipos de error observados:
+Los dos casos contados como error **son en realidad correctos**: Sacchi dirigió
+al Cesena (1983-85) y Bielsa al seleccionado de la Universidad de Buenos Aires.
+Wikidata no los recoge. Es decir, la referencia también tiene huecos, y una
+fuente estructurada es *más fiable*, no infalible.
 
-- **Confusión de rol.** Director deportivo o ayudante extraído como
-  `ENTRENO_A` (Sacchi en el Real Madrid).
-- **Confusión de sujeto.** Nodos de apellido suelto (`Guardiola`) acumulan
-  relaciones de fragmentos donde el sujeto real era otro, y las traspasan al
-  fusionarse.
-- **Entidades espurias.** Recuentos de palmarés (`6 Premier League`),
-  resultados (`cuarto puesto de la liga`) y fragmentos de frase extraídos como
-  nodos.
+### Las tres causas de discrepancia
 
-Se decidió **no** reingestar con un modelo de 14B: el salto de calidad no
-compensaba multiplicar por diez el tiempo de proceso. Es preferible una
-métrica honesta y documentada que un número inflado.
+Distinguirlas es lo que convierte un porcentaje en un diagnóstico:
+
+**1. Errores de extracción** — culpa del pipeline. El patrón dominante era
+la **confusión de rol**: personas relacionadas con un club a las que el modelo
+asignaba `ENTRENO_A` sin distinguir el cargo.
+
+```
+José Mourinho -ENTRENO_A-> Rio Ave              (ahí jugó)
+José Mourinho -ENTRENO_A-> FC Barcelona         (fue ayudante de Van Gaal)
+Arrigo Sacchi -ENTRENO_A-> Real Madrid          (fue director deportivo)
+Jürgen Klopp  -ENTRENO_A-> D-Juniors Fráncfort  (ahí jugó de niño)
+```
+
+Verificados uno a uno contra Wikidata y registrados en `curate.py` con su
+motivo, de forma que la corrección es reproducible y auditable.
+
+**2. Huecos del corpus** — no es culpa de nadie. Cada artículo se trunca a
+8.000 caracteres, así que las carreras largas quedan cortadas. De Zerbi tiene
+8 ausencias y Simeone 6, simplemente porque sus biografías no caben. El modelo
+no falló: la información nunca estuvo en el texto.
+
+**3. Huecos de la referencia** — los dos casos citados arriba.
+
+Solo la primera categoría mide la calidad del sistema. Un informe que las
+mezcle da un número mucho peor y mucho menos útil.
+
+### Cómo se llegó al 96%
+
+La primera medición dio **59%**, y casi todo era un fallo del comparador, no
+de la extracción:
+
+```
+SOBRA  Tottenham Hotspur F. C.        ← el mismo club
+falta  Tottenham Hotspur Football Club   contado como dos errores
+```
+
+Wikidata usa el nombre legal y el grafo el usual. La comparación exacta de
+cadenas los tomaba por clubes distintos y los penalizaba dos veces. Se
+resolvió comparando **conjuntos de palabras significativas** en lugar de
+cadenas, más un diccionario de equivalencias entre fuentes para lo que
+ninguna métrica puede deducir (`Selección neerlandesa` = `Selección de fútbol
+de los Países Bajos`).
+
+La lección es que **una métrica hay que auditarla antes de creérsela**. Ese
+59% inicial habría sido una conclusión falsa sobre el pipeline.
 
 ---
 
@@ -361,6 +401,11 @@ métrica honesta y documentada que un número inflado.
   con una relación entre ambos.
 - `langchain-experimental` está en proceso de retirada. Alternativa natural:
   `neo4j-graphrag`, mantenido por Neo4j y ya presente como dependencia.
+- **El esquema no contempla cargos directivos.** Presidentes y directores
+  deportivos acaban como `Entrenador` porque no hay un tipo mejor: es lo que
+  produjo `Sacchi -ENTRENO_A-> Real Madrid`, donde fue director deportivo. Un
+  esquema más maduro tendría `Directivo` con relaciones propias (`PRESIDIO`,
+  `FUE_DIRECTOR_DEPORTIVO_DE`).
 - **El esquema no distingue competiciones de premios individuales.** El Balón
   de Oro o el The Best acaban como `Competicion` porque no hay un tipo mejor.
   Un esquema más maduro tendría `Premio` con su relación `RECIBIO`, y

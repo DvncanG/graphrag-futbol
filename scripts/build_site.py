@@ -27,7 +27,7 @@ load_dotenv()
 
 OUTPUT = Path(__file__).parent.parent / "docs" / "index.html"
 
-# Solo relaciones de fetch_career e influencia. Las competiciones se dejan fuera
+# Solo relaciones de carrera e influencia. Las competiciones se dejan fuera
 # a proposito: son cientos de nodos de grado 1 que convierten el grafo en
 # una maranya ilegible sin aportar nada a la historia de los linajes.
 EXPORTED_RELS = [
@@ -385,7 +385,7 @@ def main() -> int:
 
     filas = grafo.query(SPARQL_QUERY)
     if not filas:
-        print("El grafo no tiene relaciones de fetch_career. Ejecuta ingest.py.")
+        print("El grafo no tiene relaciones de carrera. Ejecuta ingest.py.")
         return 1
 
     tipos: dict[str, str] = {}

@@ -107,7 +107,7 @@ def approve() -> int:
 
     n = 0
     for gr in grupos:
-        # Los de 'normalizacion' se aprueban en render_block: la match_key normalizada
+        # Los de 'normalizacion' se aprueban en bloque: la clave normalizada
         # es igualdad exacta, no parecido, y en la revision manual no dio ni
         # un falso positivo. Identificarlos por 'canonico' era fragil, porque
         # ese nombre lo elige el propio script y cambia entre ingestas.
@@ -173,7 +173,7 @@ ALIASES = {
     # existen Norbert Klopp (padre) y Carmelo Simeone (padre). En ESTE
     # corpus, el apellido suelto se refiere siempre al hijo.
     "Jürgen Klopp": ["Jürgen Norbert Klopp", "Norbert Klopp", "Klopp"],
-    "Diego Simeone": ["Diego Pablo Simeone", "Simeone","Cholo Simeone"],
+    "Diego Simeone": ["Diego Pablo Simeone", "Simeone"],
     "Mauricio Pochettino": ["Mauricio Roberto Pochettino", "Pochettino"],
     # Traducciones de topónimos: ninguna metrica de cadenas las relaciona.
     "Eintracht Fráncfort": ["Eintracht Frankfurt", "Eintracht Francfort"],
@@ -188,7 +188,6 @@ ALIASES = {
     "Oporto": ["Porto", "FC Porto"],
     "Carlo Ancelotti": ["Ancelotti"],
     "Arrigo Sacchi": ["Sacchi"],
-    "Zinedine Zidane": ["Zidane", "Zinedine Yazid Zidane", "Zinédine Zidane"],
 }
 
 # Nodos que no son entidades y que las reglas automaticas no cazan.

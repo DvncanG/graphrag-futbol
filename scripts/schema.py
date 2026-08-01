@@ -9,7 +9,7 @@ conecta con nada.
 Al cerrarlo, obligamos al modelo a encajar todo lo que lee en estas cajas.
 Extrae menos, pero lo que extrae es consistente y consultable.
 
-Regla practica: empieza con POCOS tipos. Es mas facil anadir uno que clean
+Regla practica: empieza con POCOS tipos. Es mas facil anadir uno que limpiar
 un grafo lleno de duplicados semanticos.
 """
 

@@ -74,7 +74,6 @@ ARTICLES = [
     "Jürgen Klopp",
     "Xavi Hernández",  # "Xavi" a secas es una pagina de desambiguacion
     "Roberto De Zerbi",
-    "Zinedine Zidane",
 ]
 
 
@@ -169,7 +168,7 @@ def main() -> int:
         # modelo y este extrae con tipos genericos en ingles (Person, Team...),
         # que strict_mode luego descarta enteros. Forzando extraccion por
         # prompt, el esquema va en el texto y el modelo si lo respeta.
-        # Verificado con scripts/debug_extraccion.py: pasada B vs pasada D.
+        # Verificado comparando cuatro configuraciones sobre el mismo fragmento.
         ignore_tool_usage=True,
     )
 
@@ -213,7 +212,7 @@ def main() -> int:
 
         grafo.add_graph_documents(
             grafo_docs,
-            baseEntityLabel=True,  # anade :__Entity__ a todo, util para build_index
+            baseEntityLabel=True,  # anade :__Entity__ a todo, util para indexar
             include_source=True,  # crea nodos Document -> necesario en el paso 3
         )
 
